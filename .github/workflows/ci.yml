@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uvx ruff@0.17.3 check --output-format github .
+      - run: uvx ruff@0.17.3 format --check .
+
+  catalog:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/catalog
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: services/catalog/uv.lock
+      - run: uv sync --frozen
+      - run: uv run --frozen mypy .
+      - run: uv run --frozen python manage.py makemigrations --check --dry-run
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings_test
+          DATABASE_URL: sqlite:///:memory:
+      # Tests start their own PostgreSQL through Testcontainers.
+      - run: uv run --frozen pytest --cov --cov-report=term-missing
+
+  images:
+    needs: [lint, catalog]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/catalog/Dockerfile
+          push: false
+          cache-from: type=gha,scope=catalog
+          cache-to: type=gha,mode=max,scope=catalog

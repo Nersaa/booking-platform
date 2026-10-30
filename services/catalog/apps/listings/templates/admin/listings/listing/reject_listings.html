@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <form method="post">
+    {% csrf_token %}
+    <p>The hosts will see this reason and can resubmit after fixing the listing:</p>
+    <ul>
+      {% for listing in listings %}
+        <li>{{ listing.title }} ({{ listing.host.email }})</li>
+        <input type="hidden" name="{{ action_checkbox_name }}" value="{{ listing.pk }}">
+      {% endfor %}
+    </ul>
+    {{ form.as_p }}
+    <input type="hidden" name="action" value="reject_listings">
+    <input type="submit" name="apply" value="Reject">
+  </form>
+{% endblock %}
