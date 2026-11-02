@@ -4,7 +4,7 @@ Backend for a short-term rental marketplace: hosts publish apartments and houses
 guests search by map and dates and book with prepayment. The core engineering goal is
 that the same dates can never be sold twice, even under heavy concurrent load.
 
-> Work in progress. Stages 1 and 2 are done; see the [roadmap](#roadmap).
+> Work in progress. Stages 1 to 3 are done; see the [roadmap](#roadmap).
 
 ## Architecture
 
@@ -16,16 +16,19 @@ flowchart LR
     nginx -- /media --> s3[(S3 storage)]
     catalog --> catalogdb[(PostgreSQL<br/>catalog)]
     booking --> bookingdb[(PostgreSQL + PostGIS<br/>booking)]
-    catalog -- outbox relay --> mq[[RabbitMQ]]
+    catalog -- listing events --> mq[[RabbitMQ]]
     mq -- listing events --> booking
+    booking -- booking events --> mq
+    mq -- booking events --> catalog
     catalog --> s3
-    booking --> redis[(Redis)]
+    booking <-- API + signed webhooks --> pay[Payment provider<br/>mock]
+    catalog -- email --> smtp[SMTP<br/>Mailpit]
 ```
 
 | Service | Owns | Why this framework |
 |---|---|---|
 | **Catalog** | users and JWT issuing, listings, photos, moderation, reviews, notifications | Django Admin, auth, ORM and migrations out of the box: ideal for CRUD and a back-office |
-| **Booking** | availability, pricing, quotes; bookings and payments (stage 3), search (stage 4) | async I/O and strict typing for the high-traffic path |
+| **Booking** | availability, pricing, quotes, bookings, payments and refunds; search (stage 4) | async I/O and strict typing for the high-traffic path |
 
 Each service owns its database and services never call each other synchronously while
 serving a request. Booking verifies Catalog's JWTs locally with the public keys from JWKS
@@ -49,7 +52,9 @@ sequenceDiagram
     B->>B: upsert read model if version is newer
 ```
 
-Delivery is at least once and the consumer is idempotent by `version`; see
+Booking publishes `booking.confirmed`, `booking.cancelled` and `booking.completed` the
+same way, and Catalog turns them into emails (it owns the contact details). Delivery is
+at least once and consumers are idempotent (by `version` and by processed event ids); see
 [ADR 4](docs/adr/0004-transactional-outbox.md). Event schemas are shared through
 [`libs/contracts`](libs/contracts).
 
@@ -57,14 +62,15 @@ Delivery is at least once and the consumer is idempotent by `version`; see
 
 Python 3.13 · Django 5.2 · DRF · FastAPI · SQLAlchemy 2 (async) · Alembic · FastStream ·
 PostgreSQL 17 + PostGIS · Redis · RabbitMQ · Celery · S3-compatible storage (RustFS
-locally) · Nginx · Docker Compose · uv · ruff · mypy · pytest + Testcontainers · GitHub Actions
+locally) · Mailpit · Nginx · Docker Compose · uv · ruff · mypy · pytest + Testcontainers ·
+GitHub Actions
 
 ## Quick start
 
 Requirements: Docker with Compose v2 and Python 3 (only to generate secrets).
 
 ```bash
-python scripts/init_env.py      # creates .env with random secrets
+python scripts/init_env.py      # creates .env with random secrets (adds new keys on upgrade)
 docker compose up -d --build
 docker compose exec catalog-api python manage.py createsuperuser
 ```
@@ -75,6 +81,8 @@ docker compose exec catalog-api python manage.py createsuperuser
 | http://localhost/api/docs/booking/ | Booking API (Swagger UI) |
 | http://localhost/admin/ | Moderation desk (Django Admin) |
 | http://localhost/.well-known/jwks.json | Public keys for JWT verification |
+| http://localhost:8025 | Mailpit: every email the platform sends |
+| http://localhost:8090/docs | Payment provider mock |
 | http://localhost:15672 | RabbitMQ management |
 | http://localhost:9001 | Object storage console |
 
@@ -121,7 +129,40 @@ A listing is bookable once it is published and priced. Overlaps are rejected by
 PostgreSQL exclusion constraints, so they hold under concurrent requests too
 ([ADR 5](docs/adr/0005-availability-and-pricing-model.md)).
 
-Errors of both services follow [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)
+#### Bookings and payments
+
+Unsafe calls require an `Idempotency-Key` header; a retry with the same key returns the
+first response instead of doing the work twice.
+
+| Method | Path | Who | Description |
+|---|---|---|---|
+| POST | `/api/v1/bookings` | user | Book: prices the stay and holds the dates for 15 minutes |
+| GET | `/api/v1/bookings`, `/api/v1/bookings/{id}` | guest | Own bookings |
+| POST | `/api/v1/bookings/{id}/payments` | guest | Start a payment, get the checkout URL |
+| POST | `/api/v1/bookings/{id}/cancel` | guest | Cancel; refund by policy |
+| GET | `/api/v1/host/bookings`, `/api/v1/host/bookings/{id}` | host | Stays at own listings |
+| POST | `/api/v1/host/bookings/{id}/cancel` | host | Cancel; the guest gets a full refund |
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending_payment: book (dates held 15 min)
+    pending_payment --> confirmed: payment.succeeded webhook
+    pending_payment --> expired: hold ran out
+    pending_payment --> cancelled: guest
+    confirmed --> cancelled: guest or host, refund by policy
+    confirmed --> completed: after check-out
+```
+
+Two active bookings can never overlap: a PostgreSQL exclusion constraint guarantees it
+under any concurrency ([ADR 6](docs/adr/0006-booking-consistency.md)). Payment outcomes
+arrive as HMAC-signed webhooks, processed exactly once; refunds are recorded with the
+cancellation and sent to the provider by a retrying job
+([ADR 7](docs/adr/0007-payments-and-webhooks.md)).
+
+Cancellation policy: host cancels → full refund; guest cancels 7+ days before check-in →
+full refund, 1 to 6 days → half, on the day → none.
+
+Errors of all services follow [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)
 (`application/problem+json`).
 
 ### Listing lifecycle
@@ -148,11 +189,11 @@ stateDiagram-v2
 
 ## Development
 
-Each service is its own uv project; `libs/contracts` is installed into both as an
-editable path dependency.
+Each service is its own uv project; `libs/contracts` is installed into Catalog and Booking
+as an editable path dependency.
 
 ```bash
-cd services/catalog    # or services/booking
+cd services/catalog    # or services/booking, services/payment-mock
 uv sync
 uv run pytest          # starts PostgreSQL (and RabbitMQ) via Testcontainers; Docker required
 uv run mypy .
@@ -169,8 +210,9 @@ Install the git hooks once with `uvx pre-commit install`.
 - [x] **Stage 2. Service integration:** transactional outbox → RabbitMQ → Booking read
   model (FastAPI, FastStream, SQLAlchemy async, Alembic); JWT verification via JWKS;
   calendar, pricing and quotes.
-- [ ] **Stage 3. Bookings:** exclusion constraint against double booking, idempotency,
-  booking state machine, payment provider mock with webhooks, refunds, emails.
+- [x] **Stage 3. Bookings:** exclusion constraint against double booking, idempotency
+  keys, booking state machine, payment provider mock with HMAC webhooks, refunds,
+  booking events and emails.
 - [ ] **Stage 4. Search and reviews:** geo search with filters, caching, keyset
   pagination, rate limiting, reviews feeding the rating.
 - [ ] **Stage 5. Load and operations:** Locust results, metrics and dashboards,

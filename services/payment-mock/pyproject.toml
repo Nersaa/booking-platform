@@ -1,0 +1,38 @@
+[project]
+name = "payment-mock"
+version = "0.1.0"
+description = "Stand-in for a card payment provider, for local development and demos"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.116",
+    "httpx>=0.28",
+    "pydantic-settings>=2.10",
+    "uvicorn[standard]>=0.35",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.17",
+    "pytest>=8.4",
+    "pytest-asyncio>=1.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ['\.venv/']
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false

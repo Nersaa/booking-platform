@@ -1,0 +1,6 @@
+{% autoescape off %}Hi {{ user.first_name }},
+
+the booking at {{ title }} for {{ booking.check_in|date:"j M" }} - {{ booking.check_out|date:"j M Y" }} was cancelled{% if booking.cancelled_by == "host" %} by you{% else %} by the guest{% endif %}. The dates are open again.
+
+Booking reference: {{ booking.id }}
+{% endautoescape %}

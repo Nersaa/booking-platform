@@ -15,6 +15,8 @@ x-catalog-env: &catalog-env
   S3_SECRET_KEY: ${S3_SECRET_KEY:?set in .env}
   S3_BUCKET: listing-photos
   MEDIA_PUBLIC_BASE_URL: http://localhost/media
+  EMAIL_HOST: mailpit
+  EMAIL_PORT: 1025
 
 x-catalog: &catalog
   image: booking-platform/catalog:local
@@ -35,6 +37,9 @@ x-booking: &booking
     DATABASE_URL: postgresql+asyncpg://booking:${BOOKING_DB_PASSWORD}@postgres:5432/booking
     RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
     JWKS_URL: http://catalog-api:8000/.well-known/jwks.json
+    PAYMENT_PROVIDER_URL: http://payment-mock:8000
+    PAYMENT_PROVIDER_API_KEY: ${PAYMENT_PROVIDER_API_KEY:?run python scripts/init_env.py}
+    PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?run python scripts/init_env.py}
   restart: unless-stopped
 
 services:
@@ -152,6 +157,15 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  catalog-event-consumer:
+    <<: *catalog
+    command: python manage.py consume_events
+    depends_on:
+      catalog-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
   booking-migrate:
     <<: *booking
     command: alembic upgrade head
@@ -180,6 +194,28 @@ services:
         condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
+
+  # Stand-in for a card payment provider; its checkout page is opened by the guest.
+  payment-mock:
+    image: booking-platform/payment-mock:local
+    build:
+      context: .
+      dockerfile: services/payment-mock/Dockerfile
+    environment:
+      API_KEY: ${PAYMENT_PROVIDER_API_KEY}
+      WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET}
+      WEBHOOK_URL: http://booking-api:8000/api/v1/payments/webhook
+      PUBLIC_URL: http://localhost:8090
+    ports:
+      - "127.0.0.1:8090:8000"
+    restart: unless-stopped
+
+  # Catches all outgoing email; web UI at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:v1.29
+    ports:
+      - "127.0.0.1:8025:8025"
+    restart: unless-stopped
 
   nginx:
     image: nginx:1.27-alpine

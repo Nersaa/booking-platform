@@ -1,11 +1,11 @@
 """Pricing and availability use cases. Routers only translate HTTP to these calls."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, Delete, delete, func, select
+from sqlalchemy import CursorResult, Delete, and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import Range, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,14 @@ from app.availability.models import (
     SeasonalRate,
     period_bounds,
 )
-from app.availability.pricing import PriceRules, Season, night_price, nights_between, price_stay
+from app.availability.pricing import (
+    PriceRules,
+    Season,
+    StayPrice,
+    night_price,
+    nights_between,
+    price_stay,
+)
 from app.availability.schemas import (
     BlockIn,
     CalendarDay,
@@ -27,6 +34,7 @@ from app.availability.schemas import (
     QuoteOut,
     SeasonalRateIn,
 )
+from app.bookings.models import Booking, BookingStatus
 from app.errors import ConflictError, DomainError, NotFoundError
 from app.listings.models import Listing
 
@@ -125,6 +133,10 @@ async def list_blocks(session: AsyncSession, listing: Listing) -> Sequence[Avail
 async def add_block(session: AsyncSession, listing: Listing, data: BlockIn) -> AvailabilityBlock:
     if data.start_date < today():
         raise DomainError("Past dates cannot be blocked.")
+    # Same lock as booking creation: a block and a booking cannot slip in side by side.
+    await lock_listing(session, listing.id)
+    if await _booked_nights(session, listing.id, data.start_date, data.end_date):
+        raise DatesUnavailableError("Some of these nights are already booked.")
     block = AvailabilityBlock(
         listing_id=listing.id, period=Range(data.start_date, data.end_date), note=data.note
     )
@@ -154,7 +166,7 @@ async def get_calendar(
     _, pricing = await _bookable(session, listing_id)
     rules = _rules(pricing)
     seasons = await _seasons(session, listing_id, start, end)
-    blocked = await _blocked_nights(session, listing_id, start, end)
+    blocked = await _unavailable_nights(session, listing_id, start, end)
     return CalendarOut(
         listing_id=listing_id,
         currency=pricing.currency,
@@ -171,9 +183,20 @@ async def get_calendar(
     )
 
 
-async def get_quote(
-    session: AsyncSession, listing_id: UUID, check_in: date, check_out: date, guests: int
-) -> QuoteOut:
+async def price_available_stay(
+    session: AsyncSession,
+    listing_id: UUID,
+    check_in: date,
+    check_out: date,
+    guests: int,
+    *,
+    lock: bool = False,
+) -> tuple[Listing, ListingPricing, StayPrice]:
+    """Validate a stay against the listing's rules and calendar, then price it.
+
+    With `lock=True` the listing row stays locked until the transaction ends, so the
+    caller can book the dates without anyone taking them in between.
+    """
     if check_in < today():
         raise InvalidStayError("Check-in cannot be in the past.")
     if check_out <= check_in:
@@ -181,7 +204,7 @@ async def get_quote(
     if check_in > today() + timedelta(days=BOOKING_WINDOW_DAYS):
         raise InvalidStayError(f"Bookings open {BOOKING_WINDOW_DAYS} days in advance.")
 
-    listing, pricing = await _bookable(session, listing_id)
+    listing, pricing = await _bookable(session, listing_id, lock=lock)
     nights = (check_out - check_in).days
     if not pricing.min_nights <= nights <= pricing.max_nights:
         raise InvalidStayError(
@@ -189,11 +212,17 @@ async def get_quote(
         )
     if guests > listing.max_guests:
         raise InvalidStayError(f"This place hosts at most {listing.max_guests} guests.")
-    if await _blocked_nights(session, listing_id, check_in, check_out):
+    if await _unavailable_nights(session, listing_id, check_in, check_out):
         raise DatesUnavailableError("Some of the selected nights are not available.")
 
     seasons = await _seasons(session, listing_id, check_in, check_out)
-    stay = price_stay(_rules(pricing), seasons, check_in, check_out)
+    return listing, pricing, price_stay(_rules(pricing), seasons, check_in, check_out)
+
+
+async def get_quote(
+    session: AsyncSession, listing_id: UUID, check_in: date, check_out: date, guests: int
+) -> QuoteOut:
+    _, pricing, stay = await price_available_stay(session, listing_id, check_in, check_out, guests)
     return QuoteOut(
         listing_id=listing_id,
         check_in=check_in,
@@ -228,13 +257,22 @@ async def _deleted(session: AsyncSession, stmt: Delete) -> bool:
     return result.rowcount > 0
 
 
-async def _bookable(session: AsyncSession, listing_id: UUID) -> tuple[Listing, ListingPricing]:
+async def lock_listing(session: AsyncSession, listing_id: UUID) -> None:
+    """Serialises changes to one listing's calendar (bookings and blocks)."""
+    await session.execute(select(Listing.id).where(Listing.id == listing_id).with_for_update())
+
+
+async def _bookable(
+    session: AsyncSession, listing_id: UUID, *, lock: bool = False
+) -> tuple[Listing, ListingPricing]:
     """A listing can be booked once it is published and the host has set a price."""
     stmt = (
         select(Listing, ListingPricing)
         .join(ListingPricing, ListingPricing.listing_id == Listing.id)
         .where(Listing.id == listing_id, Listing.is_listed)
     )
+    if lock:
+        stmt = stmt.with_for_update(of=Listing)
     row = (await session.execute(stmt)).one_or_none()
     if row is None:
         raise NotFoundError("This listing is not available for booking.")
@@ -263,15 +301,39 @@ async def _seasons(session: AsyncSession, listing_id: UUID, start: date, end: da
     ]
 
 
-async def _blocked_nights(
+async def _unavailable_nights(
     session: AsyncSession, listing_id: UUID, start: date, end: date
 ) -> set[date]:
-    stmt = select(AvailabilityBlock.period).where(
+    """Nights closed by the host or held by an active booking."""
+    blocks = select(AvailabilityBlock.period).where(
         AvailabilityBlock.listing_id == listing_id,
         AvailabilityBlock.period.overlaps(Range(start, end)),
     )
-    blocked: set[date] = set()
-    for period in await session.scalars(stmt):
+    nights = _expand(await session.scalars(blocks), start, end)
+    return nights | await _booked_nights(session, listing_id, start, end)
+
+
+async def _booked_nights(
+    session: AsyncSession, listing_id: UUID, start: date, end: date
+) -> set[date]:
+    stmt = select(Booking.period).where(
+        Booking.listing_id == listing_id,
+        Booking.period.overlaps(Range(start, end)),
+        or_(
+            Booking.status == BookingStatus.CONFIRMED,
+            # A hold past its expiry no longer counts, even before the sweeper expires it.
+            and_(
+                Booking.status == BookingStatus.PENDING_PAYMENT,
+                Booking.hold_expires_at > func.now(),
+            ),
+        ),
+    )
+    return _expand(await session.scalars(stmt), start, end)
+
+
+def _expand(periods: Iterable[Range[date]], start: date, end: date) -> set[date]:
+    nights: set[date] = set()
+    for period in periods:
         lower, upper = period_bounds(period)
-        blocked.update(nights_between(max(lower, start), min(upper, end)))
-    return blocked
+        nights.update(nights_between(max(lower, start), min(upper, end)))
+    return nights

@@ -1,4 +1,4 @@
-.PHONY: env up down reset logs lint format test test-catalog test-booking typecheck typecheck-catalog typecheck-booking superuser
+.PHONY: env up down reset logs lint format test test-catalog test-booking test-payment-mock typecheck typecheck-catalog typecheck-booking typecheck-payment-mock superuser
 
 env:
 	python scripts/init_env.py
@@ -23,7 +23,7 @@ format:
 	uvx ruff@0.17.3 check --fix .
 	uvx ruff@0.17.3 format .
 
-test: test-catalog test-booking
+test: test-catalog test-booking test-payment-mock
 
 test-catalog:
 	cd services/catalog && uv run --frozen pytest
@@ -31,13 +31,19 @@ test-catalog:
 test-booking:
 	cd services/booking && uv run --frozen pytest
 
-typecheck: typecheck-catalog typecheck-booking
+test-payment-mock:
+	cd services/payment-mock && uv run --frozen pytest
+
+typecheck: typecheck-catalog typecheck-booking typecheck-payment-mock
 
 typecheck-catalog:
 	cd services/catalog && uv run --frozen mypy .
 
 typecheck-booking:
 	cd services/booking && uv run --frozen mypy .
+
+typecheck-payment-mock:
+	cd services/payment-mock && uv run --frozen mypy .
 
 superuser:
 	docker compose exec catalog-api python manage.py createsuperuser

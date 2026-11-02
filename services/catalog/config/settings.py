@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "apps.users",
     "apps.listings",
     "apps.outbox",
+    "apps.notifications",
 ]
 
 MIDDLEWARE = [
@@ -164,6 +165,15 @@ S3_SECRET_KEY = env("S3_SECRET_KEY", default=None)
 S3_REGION = env("S3_REGION", default="us-east-1")
 S3_BUCKET = env("S3_BUCKET", default="listing-photos")
 MEDIA_PUBLIC_BASE_URL = env("MEDIA_PUBLIC_BASE_URL", default="http://localhost/media")
+
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", default="localhost")
+EMAIL_PORT = env.int("EMAIL_PORT", default=25)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Booking Platform <no-reply@booking.local>")
 
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="amqp://localhost//")
 # Domain events for other services (see apps.outbox); the same RabbitMQ by default.

@@ -1,0 +1,8 @@
+{% autoescape off %}Hi {{ user.first_name }},
+
+your booking at {{ title }} for {{ booking.check_in|date:"j M" }} - {{ booking.check_out|date:"j M Y" }} was cancelled{% if booking.cancelled_by == "host" %} by the host{% endif %}.
+
+{% if booking.refund %}We are refunding {{ refund }}. It usually reaches your card within a few days.{% else %}Under the cancellation policy no refund is due.{% endif %}
+
+Booking reference: {{ booking.id }}
+{% endautoescape %}

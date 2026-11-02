@@ -1,0 +1,11 @@
+{% autoescape off %}Hi {{ user.first_name }},
+
+your stay at {{ title }} is confirmed.
+
+Check-in:  {{ booking.check_in|date:"D, j M Y" }}
+Check-out: {{ booking.check_out|date:"D, j M Y" }} ({{ nights }} night{{ nights|pluralize }})
+Guests:    {{ booking.guests }}
+Paid:      {{ total }}
+
+Booking reference: {{ booking.id }}
+{% endautoescape %}

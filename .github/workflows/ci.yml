@@ -38,7 +38,7 @@ jobs:
       - run: uv run --frozen python manage.py makemigrations --check --dry-run
         env:
           DJANGO_SETTINGS_MODULE: config.settings_test
-          DATABASE_URL: sqlite:///:memory:
+          DATABASE_URL: "sqlite:///:memory:"
       # Tests start their own PostgreSQL through Testcontainers.
       - run: uv run --frozen pytest --cov --cov-report=term-missing
 
@@ -60,12 +60,28 @@ jobs:
       # and check that they match the models.
       - run: uv run --frozen pytest --cov --cov-report=term-missing
 
+  payment-mock:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/payment-mock
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: services/payment-mock/uv.lock
+      - run: uv sync --frozen
+      - run: uv run --frozen mypy .
+      - run: uv run --frozen pytest
+
   images:
-    needs: [lint, catalog, booking]
+    needs: [lint, catalog, booking, payment-mock]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [catalog, booking]
+        service: [catalog, booking, payment-mock]
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3

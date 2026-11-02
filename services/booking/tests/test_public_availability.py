@@ -7,22 +7,9 @@ import pytest
 from httpx import AsyncClient
 
 from app.listings.models import Listing
-from tests.test_host_availability import PRICING, period
+from tests.test_host_availability import period
 
 Headers = Callable[..., dict[str, str]]
-
-
-@pytest.fixture
-async def priced_listing(
-    client: AsyncClient, make_listing: Callable[..., Any], auth: Headers
-) -> Listing:
-    listing: Listing = await make_listing(max_guests=3)
-    host = auth(listing.host_id, "host")
-    response = await client.put(
-        f"/api/v1/host/listings/{listing.id}/pricing", json=PRICING, headers=host
-    )
-    assert response.status_code == 200
-    return listing
 
 
 async def _host_post(

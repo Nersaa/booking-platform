@@ -7,17 +7,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.listings.models import Listing
-
-PRICING = {
-    "currency": "EUR",
-    "nightly_price": 10_000,
-    "weekend_price": 14_000,
-    "cleaning_fee": 2_500,
-    "min_nights": 2,
-    "max_nights": 30,
-    "weekly_discount_percent": 10,
-    "monthly_discount_percent": 20,
-}
+from tests.factories import PRICING
 
 Headers = Callable[..., dict[str, str]]
 

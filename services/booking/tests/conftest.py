@@ -20,11 +20,12 @@ from app.listings.models import Listing
 from app.listings.sync import apply_listing_snapshot
 from app.main import create_app
 from app.settings import Settings
-from tests.factories import snapshot
+from tests.factories import PRICING, FakePaymentProvider, snapshot
 
 ISSUER = "catalog"
 AUDIENCE = "booking-platform"
 KEY_ID = "test-key"
+WEBHOOK_SECRET = "test-webhook-secret"
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 
 TokenFactory = Callable[..., str]
@@ -63,7 +64,9 @@ async def database(migrated_database_url: str) -> AsyncIterator[Database]:
 async def db(database: Database) -> AsyncIterator[Database]:
     yield database
     async with database.engine.begin() as connection:
-        await connection.execute(text("TRUNCATE listings CASCADE"))
+        await connection.execute(
+            text("TRUNCATE listings, outbox, idempotency_keys, processed_webhooks CASCADE")
+        )
 
 
 @pytest.fixture(scope="session")
@@ -122,11 +125,21 @@ def make_token(signing_key: rsa.RSAPrivateKey) -> TokenFactory:
 
 @pytest.fixture
 async def client(
-    db: Database, verifier: TokenVerifier, migrated_database_url: str
+    db: Database,
+    verifier: TokenVerifier,
+    payment_provider: FakePaymentProvider,
+    migrated_database_url: str,
 ) -> AsyncIterator[AsyncClient]:
-    app = create_app(Settings(database_url=migrated_database_url))
+    app = create_app(
+        Settings(
+            database_url=migrated_database_url,
+            payment_provider_api_key="test-api-key",
+            payment_webhook_secret=WEBHOOK_SECRET,
+        )
+    )
     app.state.db = db
     app.state.verifier = verifier
+    app.state.payments = payment_provider
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 
@@ -152,6 +165,26 @@ def make_listing(db: Database) -> Callable[..., Any]:
             return await session.get_one(Listing, listing_snapshot.id)
 
     return make
+
+
+@pytest.fixture
+def payment_provider() -> FakePaymentProvider:
+    return FakePaymentProvider()
+
+
+@pytest.fixture
+async def priced_listing(
+    client: AsyncClient, make_listing: Callable[..., Any], auth: Callable[..., dict[str, str]]
+) -> Listing:
+    """A published listing for 3 guests with PRICING (EUR, min 2 nights)."""
+    listing: Listing = await make_listing(max_guests=3)
+    response = await client.put(
+        f"/api/v1/host/listings/{listing.id}/pricing",
+        json=PRICING,
+        headers=auth(listing.host_id, "host"),
+    )
+    assert response.status_code == 200
+    return listing
 
 
 @pytest.fixture

@@ -1,0 +1,11 @@
+{% autoescape off %}Hi {{ user.first_name }},
+
+you have a new booking at {{ title }}.
+
+Check-in:  {{ booking.check_in|date:"D, j M Y" }}
+Check-out: {{ booking.check_out|date:"D, j M Y" }} ({{ nights }} night{{ nights|pluralize }})
+Guests:    {{ booking.guests }}
+Total:     {{ total }}
+
+Booking reference: {{ booking.id }}
+{% endautoescape %}

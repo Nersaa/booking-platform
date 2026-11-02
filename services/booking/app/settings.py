@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     jwt_audience: str = "booking-platform"
     jwks_cache_seconds: int = 3600
 
+    payment_provider_url: str = "http://payment-mock:8000"
+    payment_provider_api_key: str
+    payment_webhook_secret: str
+    hold_minutes: int = Field(15, description="How long unpaid bookings keep their dates.")
+
     log_level: str = "INFO"
 
 
