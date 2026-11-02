@@ -23,3 +23,8 @@ staticfiles/
 .vscode/
 *.log
 celerybeat-schedule*
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

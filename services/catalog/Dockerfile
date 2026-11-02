@@ -7,14 +7,18 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=0 \
     UV_PROJECT_ENVIRONMENT=/opt/venv
-WORKDIR /app
+WORKDIR /src/services/catalog
 
+# Shared libraries are installed as regular packages (--no-editable), so the
+# runtime image needs only the virtualenv.
 RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=libs,target=/src/libs,rw \
     --mount=type=bind,source=services/catalog/uv.lock,target=uv.lock \
     --mount=type=bind,source=services/catalog/pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-dev --no-install-project
+    uv sync --frozen --no-dev --no-editable --no-install-project
 
 COPY services/catalog/ /app/
+WORKDIR /app
 RUN DJANGO_SECRET_KEY=build-only DATABASE_URL=sqlite:// REDIS_URL=redis://localhost \
     /opt/venv/bin/python manage.py collectstatic --noinput
 

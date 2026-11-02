@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "apps.common",
     "apps.users",
     "apps.listings",
+    "apps.outbox",
 ]
 
 MIDDLEWARE = [
@@ -165,6 +166,8 @@ S3_BUCKET = env("S3_BUCKET", default="listing-photos")
 MEDIA_PUBLIC_BASE_URL = env("MEDIA_PUBLIC_BASE_URL", default="http://localhost/media")
 
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="amqp://localhost//")
+# Domain events for other services (see apps.outbox); the same RabbitMQ by default.
+EVENT_BUS_URL = env("EVENT_BUS_URL", default=CELERY_BROKER_URL)
 CELERY_TASK_IGNORE_RESULT = True
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
@@ -173,6 +176,10 @@ CELERY_BEAT_SCHEDULE = {
     "cleanup-abandoned-photo-uploads": {
         "task": "apps.listings.tasks.cleanup_abandoned_photos",
         "schedule": crontab(minute=0),
+    },
+    "purge-published-outbox-events": {
+        "task": "apps.outbox.tasks.purge_published_events",
+        "schedule": crontab(hour=3, minute=30),
     },
 }
 

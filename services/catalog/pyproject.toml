@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 dependencies = [
     "argon2-cffi>=23.1",
     "boto3>=1.35",
+    "booking-contracts",
     "celery>=5.5",
     "django>=5.2,<6.0",
     "django-environ>=0.12",
@@ -37,6 +38,9 @@ dev = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+booking-contracts = { path = "../../libs/contracts", editable = true }
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings_test"

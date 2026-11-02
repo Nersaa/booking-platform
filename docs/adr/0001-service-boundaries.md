@@ -23,6 +23,6 @@ when the back-office is down.
 
 - Booking keeps working (search and bookings) when Catalog is unavailable.
 - Listing changes reach search with a small delay (eventual consistency).
-- We need reliable event delivery: see the transactional outbox ADR (stage 2).
+- We need reliable event delivery: see [ADR 4](0004-transactional-outbox.md).
 - Splitting further (auth, payments, notifications as separate services) was rejected:
   it would add deployment and consistency cost without a different load or data profile.

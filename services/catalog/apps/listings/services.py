@@ -4,13 +4,15 @@ from collections.abc import Iterable
 from datetime import timedelta
 from typing import Any
 
+from contracts import ListingEventType
 from django.db import transaction
-from django.db.models import F, Max
+from django.db.models import Max
 from django.utils import timezone
 
 from apps.common import storage
 from apps.common.exceptions import DomainError, InvalidStateTransitionError, PermissionDeniedError
 from apps.listings import images
+from apps.listings.events import emit_listing_event
 from apps.listings.models import Amenity, Listing, ListingPhoto, ListingStatus, PhotoStatus
 from apps.users.models import User
 
@@ -72,6 +74,8 @@ def listing_update(
     listing.save()
     if amenities is not None:
         listing.amenities.set(amenities)
+    if listing.status == S.PUBLISHED:
+        emit_listing_event(listing, ListingEventType.UPDATED)
     return listing
 
 
@@ -94,6 +98,7 @@ def listing_publish(*, listing: Listing) -> Listing:
     listing.save(
         update_fields=["status", "version", "rejection_reason", "published_at", "updated_at"]
     )
+    emit_listing_event(listing, ListingEventType.PUBLISHED)
     return listing
 
 
@@ -111,8 +116,12 @@ def listing_reject(*, listing: Listing, reason: str) -> Listing:
 @transaction.atomic
 def listing_archive(*, listing: Listing) -> Listing:
     listing = _lock(listing)
+    was_listed = listing.status == S.PUBLISHED
     _transition(listing, S.ARCHIVED)
     listing.save(update_fields=["status", "version", "updated_at"])
+    # Other services only ever learned about published listings.
+    if was_listed:
+        emit_listing_event(listing, ListingEventType.ARCHIVED)
     return listing
 
 
@@ -192,6 +201,7 @@ def photo_delete(*, photo: ListingPhoto) -> None:
     if listing.status == S.PUBLISHED:
         listing.version += 1
         listing.save(update_fields=["version", "updated_at"])
+        emit_listing_event(listing, ListingEventType.UPDATED)
     _delete_objects_on_commit(keys)
 
 
@@ -216,16 +226,18 @@ def photo_process(*, photo_id: str) -> None:
     large = next(v for v in variants if v.name == "large")
 
     with transaction.atomic():
+        # Listing first, then photo: the same lock order as everywhere else.
+        listing = Listing.objects.select_for_update().filter(pk=photo.listing_id).first()
         updated = ListingPhoto.objects.filter(pk=photo.pk, status=PhotoStatus.PROCESSING).update(
             status=PhotoStatus.READY,
             width=large.width,
             height=large.height,
             updated_at=timezone.now(),
         )
-        if updated:
-            Listing.objects.filter(pk=photo.listing_id, status=S.PUBLISHED).update(
-                version=F("version") + 1, updated_at=timezone.now()
-            )
+        if updated and listing is not None and listing.status == S.PUBLISHED:
+            listing.version += 1
+            listing.save(update_fields=["version", "updated_at"])
+            emit_listing_event(listing, ListingEventType.UPDATED)
     storage.delete([photo.original_key])
 
 

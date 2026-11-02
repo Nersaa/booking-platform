@@ -14,4 +14,4 @@ ignore = ["RUF012"]
 "**/tests/**" = ["S101", "S105", "S106"]
 
 [lint.isort]
-known-first-party = ["apps", "config"]
+known-first-party = ["app", "apps", "config", "tests"]

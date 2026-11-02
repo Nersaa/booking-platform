@@ -26,6 +26,17 @@ x-catalog: &catalog
     - jwt-keys:/var/lib/catalog/keys
   restart: unless-stopped
 
+x-booking: &booking
+  image: booking-platform/booking:local
+  build:
+    context: .
+    dockerfile: services/booking/Dockerfile
+  environment:
+    DATABASE_URL: postgresql+asyncpg://booking:${BOOKING_DB_PASSWORD}@postgres:5432/booking
+    RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+    JWKS_URL: http://catalog-api:8000/.well-known/jwks.json
+  restart: unless-stopped
+
 services:
   postgres:
     image: postgis/postgis:17-3.5-alpine
@@ -132,6 +143,44 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  catalog-outbox-relay:
+    <<: *catalog
+    command: python manage.py relay_outbox
+    depends_on:
+      catalog-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  booking-migrate:
+    <<: *booking
+    command: alembic upgrade head
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  booking-api:
+    <<: *booking
+    depends_on:
+      booking-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  booking-worker:
+    <<: *booking
+    command: faststream run app.worker:app
+    depends_on:
+      booking-migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
   nginx:
     image: nginx:1.27-alpine
     ports:
@@ -140,6 +189,8 @@ services:
       - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       catalog-api:
+        condition: service_healthy
+      booking-api:
         condition: service_healthy
       object-storage:
         condition: service_healthy
