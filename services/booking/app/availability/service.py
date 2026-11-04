@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import CursorResult, Delete, and_, delete, func, or_, select
+from sqlalchemy import CursorResult, Delete, delete, func, select
 from sqlalchemy.dialects.postgresql import Range, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +34,7 @@ from app.availability.schemas import (
     QuoteOut,
     SeasonalRateIn,
 )
-from app.bookings.models import Booking, BookingStatus
+from app.bookings.models import Booking
 from app.errors import ConflictError, DomainError, NotFoundError
 from app.listings.models import Listing
 
@@ -164,7 +164,7 @@ async def get_calendar(
         raise DomainError(f"end_date must be 1 to {MAX_CALENDAR_DAYS} days after start_date.")
 
     _, pricing = await _bookable(session, listing_id)
-    rules = _rules(pricing)
+    rules = price_rules(pricing)
     seasons = await _seasons(session, listing_id, start, end)
     blocked = await _unavailable_nights(session, listing_id, start, end)
     return CalendarOut(
@@ -216,7 +216,7 @@ async def price_available_stay(
         raise DatesUnavailableError("Some of the selected nights are not available.")
 
     seasons = await _seasons(session, listing_id, check_in, check_out)
-    return listing, pricing, price_stay(_rules(pricing), seasons, check_in, check_out)
+    return listing, pricing, price_stay(price_rules(pricing), seasons, check_in, check_out)
 
 
 async def get_quote(
@@ -280,7 +280,7 @@ async def _bookable(
     return listing, pricing
 
 
-def _rules(pricing: ListingPricing) -> PriceRules:
+def price_rules(pricing: ListingPricing) -> PriceRules:
     return PriceRules(
         nightly_price=pricing.nightly_price,
         weekend_price=pricing.weekend_price,
@@ -319,14 +319,7 @@ async def _booked_nights(
     stmt = select(Booking.period).where(
         Booking.listing_id == listing_id,
         Booking.period.overlaps(Range(start, end)),
-        or_(
-            Booking.status == BookingStatus.CONFIRMED,
-            # A hold past its expiry no longer counts, even before the sweeper expires it.
-            and_(
-                Booking.status == BookingStatus.PENDING_PAYMENT,
-                Booking.hold_expires_at > func.now(),
-            ),
-        ),
+        Booking.holds_dates(),
     )
     return _expand(await session.scalars(stmt), start, end)
 

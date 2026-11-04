@@ -39,6 +39,8 @@ def test_publishing_emits_a_full_snapshot(pending_listing):
     assert snapshot.amenities == ("kitchen", "wifi")
     assert snapshot.cover_photo_url is not None
     assert snapshot.cover_photo_url.endswith("/thumb.webp")
+    assert snapshot.rating is None
+    assert snapshot.review_count == 0
     assert OutboxEvent.objects.get().routing_key == "listing.published"
 
 

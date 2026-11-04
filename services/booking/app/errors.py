@@ -17,6 +17,7 @@ class DomainError(Exception):
 
     status_code: int = HTTPStatus.BAD_REQUEST
     code = "domain_error"
+    headers: dict[str, str] | None = None
 
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
@@ -48,11 +49,14 @@ class ServiceUnavailableError(DomainError):
     code = "service_unavailable"
 
 
-def problem(status: int, detail: str, **extra: Any) -> JSONResponse:
+def problem(
+    status: int, detail: str, headers: dict[str, str] | None = None, **extra: Any
+) -> JSONResponse:
     body = {"type": "about:blank", "title": HTTPStatus(status).phrase, "status": status}
     body["detail"] = detail
     body.update(extra)
-    headers = {"WWW-Authenticate": "Bearer"} if status == HTTPStatus.UNAUTHORIZED else None
+    if status == HTTPStatus.UNAUTHORIZED:
+        headers = {**(headers or {}), "WWW-Authenticate": "Bearer"}
     return JSONResponse(
         jsonable_encoder(body), status_code=status, media_type=PROBLEM_CONTENT_TYPE, headers=headers
     )
@@ -60,7 +64,7 @@ def problem(status: int, detail: str, **extra: Any) -> JSONResponse:
 
 async def _domain_error(_: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, DomainError)  # noqa: S101 - registered for DomainError only
-    return problem(exc.status_code, exc.detail, code=exc.code)
+    return problem(exc.status_code, exc.detail, exc.headers, code=exc.code)
 
 
 async def _validation_error(_: Request, exc: Exception) -> JSONResponse:

@@ -1,5 +1,6 @@
 """Listing lifecycle and photo pipeline. All writes to listings go through here."""
 
+import uuid
 from collections.abc import Iterable
 from datetime import timedelta
 from typing import Any
@@ -74,6 +75,19 @@ def listing_update(
     listing.save()
     if amenities is not None:
         listing.amenities.set(amenities)
+    if listing.status == S.PUBLISHED:
+        emit_listing_event(listing, ListingEventType.UPDATED)
+    return listing
+
+
+@transaction.atomic
+def listing_add_review_score(*, listing_id: uuid.UUID, rating: int) -> Listing:
+    """Fold a new review into the listing's rating. Locked, so concurrent reviews add up."""
+    listing = Listing.objects.select_for_update().get(pk=listing_id)
+    listing.review_count += 1
+    listing.rating_total += rating
+    listing.version += 1
+    listing.save(update_fields=["review_count", "rating_total", "version", "updated_at"])
     if listing.status == S.PUBLISHED:
         emit_listing_event(listing, ListingEventType.UPDATED)
     return listing

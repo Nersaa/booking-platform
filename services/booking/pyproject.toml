@@ -12,6 +12,7 @@ dependencies = [
     "httpx>=0.28",
     "pydantic-settings>=2.10",
     "pyjwt[crypto]>=2.10",
+    "redis>=6.2",
     "sqlalchemy[asyncio]>=2.0.41",
     "uvicorn[standard]>=0.35",
 ]
@@ -22,7 +23,7 @@ dev = [
     "pytest>=8.4",
     "pytest-asyncio>=1.1",
     "pytest-cov>=6.2",
-    "testcontainers[postgres]>=4.10",
+    "testcontainers[postgres,redis]>=4.10",
 ]
 
 [tool.uv]

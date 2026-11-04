@@ -6,6 +6,7 @@ from contracts import ListingEvent, ListingEventType, ListingSnapshot
 from django.utils import timezone
 
 from apps.common import storage
+from apps.listings import cache
 from apps.listings.models import Listing, ListingStatus, PhotoStatus
 from apps.outbox.services import outbox_add
 
@@ -31,10 +32,14 @@ def listing_snapshot(listing: Listing) -> ListingSnapshot:
         bathrooms=listing.bathrooms,
         amenities=tuple(listing.amenities.order_by("code").values_list("code", flat=True)),
         cover_photo_url=storage.public_url(cover.thumb_key) if cover else None,
+        rating=listing.rating,
+        review_count=listing.review_count,
     )
 
 
 def emit_listing_event(listing: Listing, event_type: ListingEventType) -> None:
+    """Every change visible to guests passes through here, so it also refreshes the cache."""
+    cache.invalidate_public_listing(listing.id)
     event = ListingEvent(
         event_id=uuid.uuid4(),
         event_type=event_type,

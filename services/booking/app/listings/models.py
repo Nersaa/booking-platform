@@ -1,12 +1,23 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import DateTime, Numeric, SmallInteger, String, func
+from sqlalchemy import Computed, DateTime, Index, Numeric, SmallInteger, String, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.types import UserDefinedType
 
 from app.db import Base
+
+
+class Geography(UserDefinedType[str]):
+    """PostGIS point on the WGS 84 sphere; distances come out in metres."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **kw: Any) -> str:
+        return "geography(Point,4326)"
 
 
 class Listing(Base):
@@ -33,4 +44,23 @@ class Listing(Base):
     bathrooms: Mapped[int] = mapped_column(SmallInteger)
     amenities: Mapped[list[str]] = mapped_column(ARRAY(String(50)))
     cover_photo_url: Mapped[str | None] = mapped_column(String(500))
+    rating: Mapped[Decimal | None] = mapped_column(Numeric(3, 2))
+    review_count: Mapped[int] = mapped_column(server_default=text("0"))
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # Derived by PostgreSQL from the coordinates, so it can never disagree with them.
+    # Only used inside queries (never loaded), hence deferred.
+    location: Mapped[str] = mapped_column(
+        Geography(),
+        Computed(
+            "(ST_SetSRID(ST_MakePoint(longitude::double precision, "
+            "latitude::double precision), 4326))::geography",
+            persisted=True,
+        ),
+        deferred=True,
+    )
+
+    __table_args__ = (
+        Index("ix_listings_location", "location", postgresql_using="gist"),
+        Index("ix_listings_amenities", "amenities", postgresql_using="gin"),
+    )

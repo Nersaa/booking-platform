@@ -18,6 +18,7 @@ from app.availability.schemas import (
 )
 from app.db import SessionDep
 from app.listings.models import Listing
+from app.ratelimit import LimitPerClient
 
 DEFAULT_CALENDAR_DAYS = 90
 
@@ -78,7 +79,11 @@ async def delete_block(session: SessionDep, listing: HostListingDep, block_id: U
     await service.delete_block(session, listing, block_id)
 
 
-public_router = APIRouter(prefix="/api/v1/listings/{listing_id}", tags=["availability"])
+public_router = APIRouter(
+    prefix="/api/v1/listings/{listing_id}",
+    tags=["availability"],
+    dependencies=[Depends(LimitPerClient("public"))],
+)
 
 
 @public_router.get("/calendar")

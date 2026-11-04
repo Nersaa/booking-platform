@@ -9,6 +9,7 @@ from django.core import mail
 from apps.notifications.consumer import BookingEventConsumer
 from apps.notifications.models import ProcessedEvent
 from apps.notifications.services import handle_booking_event
+from apps.reviews.models import ReviewableStay
 from tests.factories import HostFactory, ListingFactory, UserFactory
 
 pytestmark = pytest.mark.django_db
@@ -94,13 +95,23 @@ def test_cancellation_explains_the_refund(
     assert "The dates are open again" in to_host.body
 
 
-def test_completed_stay_sends_no_email(stay, django_capture_on_commit_callbacks):
+def test_completed_stay_opens_a_review_and_invites_only_the_guest(
+    stay, django_capture_on_commit_callbacks
+):
     listing, guest = stay
+    completed = event(listing, guest, BookingEventType.COMPLETED)
 
     with django_capture_on_commit_callbacks(execute=True):
-        assert handle_booking_event(event(listing, guest, BookingEventType.COMPLETED))
+        assert handle_booking_event(completed)
 
-    assert mail.outbox == []
+    reviewable = ReviewableStay.objects.get()
+    assert reviewable.booking_id == completed.booking.id
+    assert reviewable.guest == guest
+    assert reviewable.review_deadline == date(2030, 7, 18)
+    [invitation] = mail.outbox
+    assert invitation.to == [guest.email]
+    assert invitation.subject == "How was your stay at Loft & Garden?"
+    assert "until 18 Jul 2030" in invitation.body
 
 
 class FakeMessage:

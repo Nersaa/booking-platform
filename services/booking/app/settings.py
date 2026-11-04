@@ -1,12 +1,18 @@
 from functools import cache
+from typing import Annotated
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings
+
+from app.ratelimit import Rate
+
+RateSetting = Annotated[Rate, BeforeValidator(Rate.parse)]
 
 
 class Settings(BaseSettings):
     database_url: str = Field(description="postgresql+asyncpg://user:password@host/db")
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
+    redis_url: str = "redis://localhost:6379/1"
 
     jwks_url: str = "http://catalog-api:8000/.well-known/jwks.json"
     jwt_issuer: str = "catalog"
@@ -17,6 +23,12 @@ class Settings(BaseSettings):
     payment_provider_api_key: str
     payment_webhook_secret: str
     hold_minutes: int = Field(15, description="How long unpaid bookings keep their dates.")
+
+    search_cache_seconds: int = Field(30, ge=0, description="0 disables the search cache.")
+    # "<requests>/<second|minute|hour>"; per client IP for public reads, per user for writes.
+    search_rate_limit: RateSetting = Rate(60, 60)
+    public_rate_limit: RateSetting = Rate(120, 60)
+    booking_rate_limit: RateSetting = Rate(20, 60)
 
     log_level: str = "INFO"
 

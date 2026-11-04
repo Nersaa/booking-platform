@@ -1,5 +1,5 @@
 import uuid
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -75,6 +75,10 @@ class Listing(TimeStampedModel):
     # Incremented on every change; consumers use it to drop stale updates.
     version = models.PositiveIntegerField(default=1)
 
+    # Running totals of review scores, updated together with each new review.
+    review_count = models.PositiveIntegerField(default=0)
+    rating_total = models.PositiveIntegerField(default=0)
+
     class Meta:
         ordering = ("-created_at",)
         indexes = [
@@ -94,6 +98,13 @@ class Listing(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.title
+
+    @property
+    def rating(self) -> Decimal | None:
+        if not self.review_count:
+            return None
+        average = Decimal(self.rating_total) / self.review_count
+        return average.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 class PhotoStatus(models.TextChoices):

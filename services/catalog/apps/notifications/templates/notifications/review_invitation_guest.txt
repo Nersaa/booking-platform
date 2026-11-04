@@ -1,0 +1,9 @@
+{% autoescape off %}Hi {{ user.first_name }},
+
+we hope you enjoyed your stay at {{ title }} ({{ booking.check_in|date:"j M" }} - {{ booking.check_out|date:"j M Y" }}).
+
+Your review helps other guests choose and helps the host improve. You can rate the stay
+from 1 to 5 and share a few words until {{ review_deadline|date:"j M Y" }}.
+
+Booking reference: {{ booking.id }}
+{% endautoescape %}

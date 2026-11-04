@@ -38,6 +38,11 @@ class ListingSnapshot(BaseModel):
     bathrooms: int = Field(ge=0)
     amenities: tuple[str, ...]
     cover_photo_url: str | None
+    # Added in stage 4; the defaults keep older events readable.
+    rating: Decimal | None = Field(
+        None, ge=1, le=5, max_digits=3, decimal_places=2, description="Average review score."
+    )
+    review_count: int = Field(0, ge=0)
 
 
 class ListingEvent(BaseModel):

@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from django.conf import settings
+from django.core.cache import cache
 from moto import mock_aws
 from rest_framework.test import APIClient
 
@@ -47,6 +48,11 @@ def s3() -> Iterator[Any]:
         client.create_bucket(Bucket=settings.S3_BUCKET)
         yield client
     storage.reset_clients()
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache() -> None:
+    cache.clear()
 
 
 @pytest.fixture

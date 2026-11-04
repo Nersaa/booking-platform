@@ -5,12 +5,15 @@ from uuid import UUID
 
 from sqlalchemy import (
     CheckConstraint,
+    ColumnElement,
     DateTime,
     ForeignKey,
     Index,
     SmallInteger,
     String,
+    and_,
     func,
+    or_,
     text,
 )
 from sqlalchemy.dialects.postgresql import DATERANGE, ExcludeConstraint, Range
@@ -37,7 +40,7 @@ class Booking(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     listing_id: Mapped[UUID] = mapped_column(ForeignKey("listings.id"))
-    guest_id: Mapped[UUID] = mapped_column(index=True)
+    guest_id: Mapped[UUID]
     host_id: Mapped[UUID] = mapped_column(index=True)
     period: Mapped[Range[date]] = mapped_column(DATERANGE)
     guests: Mapped[int] = mapped_column(SmallInteger)
@@ -83,7 +86,21 @@ class Booking(Base):
             "hold_expires_at",
             postgresql_where=text("status = 'pending_payment'"),
         ),
+        # Serves the guest's keyset-paginated list: newest first.
+        Index("ix_bookings_guest_id_created_at", "guest_id", "created_at", "id"),
     )
+
+    @classmethod
+    def holds_dates(cls) -> ColumnElement[bool]:
+        """Confirmed, or awaiting payment within its hold. A stale hold blocks nothing,
+        even before the sweeper expires it."""
+        return or_(
+            cls.status == BookingStatus.CONFIRMED,
+            and_(
+                cls.status == BookingStatus.PENDING_PAYMENT,
+                cls.hold_expires_at > func.now(),
+            ),
+        )
 
     @property
     def check_in(self) -> date:

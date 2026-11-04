@@ -12,13 +12,16 @@ from alembic.config import Config
 from cryptography.hazmat.primitives.asymmetric import rsa
 from httpx import ASGITransport, AsyncClient
 from jwt.algorithms import RSAAlgorithm
+from redis.asyncio import Redis
 from sqlalchemy import text
 
 from app.auth import TokenVerifier
+from app.cache import ResponseCache
 from app.db import Database
 from app.listings.models import Listing
 from app.listings.sync import apply_listing_snapshot
 from app.main import create_app
+from app.ratelimit import Rate, RateLimiter
 from app.settings import Settings
 from tests.factories import PRICING, FakePaymentProvider, snapshot
 
@@ -42,6 +45,27 @@ def database_url() -> Iterator[str]:
 
     with PostgresContainer("postgis/postgis:17-3.5-alpine", driver="asyncpg") as postgres:
         yield postgres.get_connection_url()
+
+
+@pytest.fixture(scope="session")
+def redis_url() -> Iterator[str]:
+    """TEST_REDIS_URL if set, else a throwaway container."""
+    if url := os.environ.get("TEST_REDIS_URL"):
+        yield url
+        return
+
+    from testcontainers.community.redis import RedisContainer
+
+    with RedisContainer("redis:7.4-alpine") as container:
+        yield f"redis://{container.get_container_host_ip()}:{container.get_exposed_port(6379)}/0"
+
+
+@pytest.fixture
+async def redis(redis_url: str) -> AsyncIterator[Redis]:
+    client = Redis.from_url(redis_url)
+    yield client
+    await client.flushdb()
+    await client.aclose()
 
 
 @pytest.fixture(scope="session")
@@ -124,22 +148,34 @@ def make_token(signing_key: rsa.RSAPrivateKey) -> TokenFactory:
 
 
 @pytest.fixture
+def settings(migrated_database_url: str) -> Settings:
+    """No caching and generous limits; the tests of those features override this."""
+    unlimited = Rate(100_000, 60)
+    return Settings(
+        database_url=migrated_database_url,
+        payment_provider_api_key="test-api-key",
+        payment_webhook_secret=WEBHOOK_SECRET,
+        search_cache_seconds=0,
+        search_rate_limit=unlimited,
+        public_rate_limit=unlimited,
+        booking_rate_limit=unlimited,
+    )
+
+
+@pytest.fixture
 async def client(
     db: Database,
     verifier: TokenVerifier,
     payment_provider: FakePaymentProvider,
-    migrated_database_url: str,
+    redis: Redis,
+    settings: Settings,
 ) -> AsyncIterator[AsyncClient]:
-    app = create_app(
-        Settings(
-            database_url=migrated_database_url,
-            payment_provider_api_key="test-api-key",
-            payment_webhook_secret=WEBHOOK_SECRET,
-        )
-    )
+    app = create_app(settings)
     app.state.db = db
     app.state.verifier = verifier
     app.state.payments = payment_provider
+    app.state.cache = ResponseCache(redis)
+    app.state.rate_limiter = RateLimiter(redis)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 

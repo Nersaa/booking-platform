@@ -183,7 +183,7 @@ async def test_bookings_are_visible_to_their_guest_and_host_only(
         "/api/v1/host/bookings", params={"listing_id": str(priced_listing.id)}, headers=host
     )
 
-    assert [b["id"] for b in mine.json()] == [booking["id"]]
+    assert [b["id"] for b in mine.json()["items"]] == [booking["id"]]
     assert stranger.status_code == 404
     assert as_host.status_code == 200
-    assert [b["id"] for b in host_list.json()] == [booking["id"]]
+    assert [b["id"] for b in host_list.json()["items"]] == [booking["id"]]

@@ -12,10 +12,14 @@ from app.bookings import service
 from app.bookings.schemas import BookingIn, BookingOut, CancelIn, PaymentOut
 from app.db import SessionDep
 from app.idempotency import IdempotencyKeyHeader
+from app.pagination import Cursor, Limit, Page
 from app.payments import service as payments
 from app.payments.provider import PaymentProvider
+from app.ratelimit import LimitPerUser
 
 UserDep = Annotated[Principal, Depends(current_principal)]
+# Writes are limited per account: they lock rows and call the payment provider.
+WRITE_LIMIT = [Depends(LimitPerUser("booking"))]
 
 
 def _provider(request: Request) -> PaymentProvider:
@@ -28,7 +32,9 @@ ProviderDep = Annotated[PaymentProvider, Depends(_provider)]
 guest_router = APIRouter(prefix="/api/v1/bookings", tags=["bookings"])
 
 
-@guest_router.post("", status_code=status.HTTP_201_CREATED, response_model=BookingOut)
+@guest_router.post(
+    "", status_code=status.HTTP_201_CREATED, response_model=BookingOut, dependencies=WRITE_LIMIT
+)
 async def create_booking(
     request: Request,
     session: SessionDep,
@@ -54,8 +60,12 @@ async def create_booking(
 
 
 @guest_router.get("")
-async def list_my_bookings(session: SessionDep, guest: UserDep) -> list[BookingOut]:
-    return [BookingOut.from_model(b) for b in await service.list_guest_bookings(session, guest)]
+async def list_my_bookings(
+    session: SessionDep, guest: UserDep, limit: Limit = 20, cursor: Cursor = None
+) -> Page[BookingOut]:
+    """Newest first."""
+    bookings, next_cursor = await service.list_guest_bookings(session, guest, limit, cursor)
+    return Page(items=[BookingOut.from_model(b) for b in bookings], next_cursor=next_cursor)
 
 
 @guest_router.get("/{booking_id}")
@@ -64,7 +74,10 @@ async def get_my_booking(session: SessionDep, guest: UserDep, booking_id: UUID) 
 
 
 @guest_router.post(
-    "/{booking_id}/payments", status_code=status.HTTP_201_CREATED, response_model=PaymentOut
+    "/{booking_id}/payments",
+    status_code=status.HTTP_201_CREATED,
+    response_model=PaymentOut,
+    dependencies=WRITE_LIMIT,
 )
 async def pay_for_booking(
     session: SessionDep,
@@ -90,7 +103,7 @@ async def pay_for_booking(
     )
 
 
-@guest_router.post("/{booking_id}/cancel", response_model=BookingOut)
+@guest_router.post("/{booking_id}/cancel", response_model=BookingOut, dependencies=WRITE_LIMIT)
 async def cancel_my_booking(
     session: SessionDep,
     guest: UserDep,
@@ -122,11 +135,17 @@ host_router = APIRouter(prefix="/api/v1/host/bookings", tags=["host: bookings"])
 
 @host_router.get("")
 async def list_host_bookings(
-    session: SessionDep, host: HostDep, listing_id: UUID | None = None
-) -> list[BookingOut]:
-    """Upcoming, current and past stays at the host's listings."""
-    bookings = await service.list_host_bookings(session, host, listing_id)
-    return [BookingOut.from_model(b) for b in bookings]
+    session: SessionDep,
+    host: HostDep,
+    listing_id: UUID | None = None,
+    limit: Limit = 20,
+    cursor: Cursor = None,
+) -> Page[BookingOut]:
+    """Upcoming, current and past stays at the host's listings, by check-in date."""
+    bookings, next_cursor = await service.list_host_bookings(
+        session, host, listing_id, limit, cursor
+    )
+    return Page(items=[BookingOut.from_model(b) for b in bookings], next_cursor=next_cursor)
 
 
 @host_router.get("/{booking_id}")
@@ -135,7 +154,7 @@ async def get_host_booking(session: SessionDep, host: HostDep, booking_id: UUID)
     return BookingOut.from_model(booking)
 
 
-@host_router.post("/{booking_id}/cancel", response_model=BookingOut)
+@host_router.post("/{booking_id}/cancel", response_model=BookingOut, dependencies=WRITE_LIMIT)
 async def cancel_as_host(
     session: SessionDep,
     host: HostDep,

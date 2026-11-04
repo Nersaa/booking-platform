@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "apps.listings",
     "apps.outbox",
     "apps.notifications",
+    "apps.reviews",
 ]
 
 MIDDLEWARE = [

@@ -86,6 +86,9 @@ class PublicListingSerializer(serializers.ModelSerializer):
     host = HostSummarySerializer()
     amenities = AmenitySerializer(many=True)
     photos = PhotoSerializer(many=True)
+    rating = serializers.DecimalField(
+        max_digits=3, decimal_places=2, allow_null=True, help_text="Average review score, 1 to 5."
+    )
 
     class Meta:
         model = Listing
@@ -94,6 +97,8 @@ class PublicListingSerializer(serializers.ModelSerializer):
             "host",
             *ListingWriteSerializer.Meta.fields,
             "photos",
+            "rating",
+            "review_count",
             "published_at",
         )
         read_only_fields = fields

@@ -1,8 +1,10 @@
 import asyncio
+import warnings
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import SAWarning
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.models import Base
@@ -13,6 +15,10 @@ if config.config_file_name and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
+# Reflection does not know PostGIS types; listings.location is declared in the model, so
+# the warning carries no information.
+warnings.filterwarnings("ignore", "Did not recognize type 'geography'", SAWarning)
 
 
 def database_url() -> str:

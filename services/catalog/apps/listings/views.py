@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
@@ -9,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.common.pagination import CreatedAtCursorPagination
-from apps.listings import selectors, services
+from apps.listings import cache, selectors, services
 from apps.listings.models import Amenity, Listing, ListingPhoto
 from apps.listings.permissions import IsHost
 from apps.listings.serializers import (
@@ -40,6 +42,14 @@ class PublicListingDetailView(generics.RetrieveAPIView):
 
     def get_queryset(self) -> QuerySet[Listing]:
         return selectors.published_listings()
+
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        listing_id = kwargs["pk"]
+        data = cache.get_public_listing(listing_id)
+        if data is None:
+            data = self.get_serializer(self.get_object()).data
+            cache.set_public_listing(listing_id, data)
+        return Response(data)
 
 
 @extend_schema(tags=["host listings"])

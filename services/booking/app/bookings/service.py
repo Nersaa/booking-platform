@@ -8,8 +8,7 @@ confirmed       -> completed   (after check-out)
 """
 
 import uuid
-from collections.abc import Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
@@ -31,6 +30,7 @@ from app.bookings.policy import refund_amount
 from app.bookings.schemas import BookingIn
 from app.errors import ConflictError, DomainError, NotFoundError
 from app.outbox import outbox_add
+from app.pagination import Keyset
 from app.payments.refunds import schedule_refund
 
 S = BookingStatus
@@ -107,27 +107,33 @@ async def get_booking(
     return booking
 
 
-async def list_guest_bookings(session: AsyncSession, guest: Principal) -> Sequence[Booking]:
-    stmt = (
-        select(Booking)
-        .where(Booking.guest_id == guest.user_id)
-        .order_by(Booking.created_at.desc())
-        .limit(100)
-    )
-    return (await session.scalars(stmt)).all()
+GUEST_LIST = Keyset(
+    "guest-bookings", [Booking.created_at, Booking.id], [datetime, UUID], descending=True
+)
+HOST_LIST = Keyset("host-bookings", [func.lower(Booking.period), Booking.id], [date, UUID])
+
+
+async def list_guest_bookings(
+    session: AsyncSession, guest: Principal, limit: int, cursor: str | None
+) -> tuple[list[Booking], str | None]:
+    """Newest first."""
+    stmt = select(Booking).where(Booking.guest_id == guest.user_id)
+    bookings = (await session.scalars(GUEST_LIST.apply(stmt, cursor, limit))).all()
+    return GUEST_LIST.page(bookings, limit, lambda b: [b.created_at, b.id])
 
 
 async def list_host_bookings(
-    session: AsyncSession, host: Principal, listing_id: UUID | None
-) -> Sequence[Booking]:
+    session: AsyncSession, host: Principal, listing_id: UUID | None, limit: int, cursor: str | None
+) -> tuple[list[Booking], str | None]:
+    """By check-in date."""
     stmt = select(Booking).where(
         Booking.host_id == host.user_id,
         Booking.status.in_((S.CONFIRMED, S.PENDING_PAYMENT, S.COMPLETED)),
     )
     if listing_id is not None:
         stmt = stmt.where(Booking.listing_id == listing_id)
-    stmt = stmt.order_by(func.lower(Booking.period)).limit(200)
-    return (await session.scalars(stmt)).all()
+    bookings = (await session.scalars(HOST_LIST.apply(stmt, cursor, limit))).all()
+    return HOST_LIST.page(bookings, limit, lambda b: [b.check_in, b.id])
 
 
 async def cancel_booking(

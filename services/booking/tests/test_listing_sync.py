@@ -1,4 +1,6 @@
-from contracts import ListingEventType
+from decimal import Decimal
+
+from contracts import ListingEventType, ListingSnapshot
 from faststream.rabbit import RabbitBroker, TestRabbitBroker
 
 from app.db import Database
@@ -40,6 +42,29 @@ async def test_stale_and_duplicate_snapshots_are_ignored(db: Database) -> None:
     stored = await _stored(db, current.id)
     assert stored is not None
     assert (stored.version, stored.title) == (5, "Current")
+
+
+async def test_rating_from_reviews_reaches_the_read_model(db: Database) -> None:
+    unrated = snapshot(version=2)
+    reviewed = unrated.model_copy(
+        update={"version": 3, "rating": Decimal("4.67"), "review_count": 3}
+    )
+
+    async with db.sessions.begin() as session:
+        await apply_listing_snapshot(session, unrated)
+        await apply_listing_snapshot(session, reviewed)
+
+    stored = await _stored(db, unrated.id)
+    assert stored is not None
+    assert (stored.rating, stored.review_count) == (Decimal("4.67"), 3)
+
+
+def test_events_from_before_ratings_are_still_readable() -> None:
+    old_payload = snapshot().model_dump(mode="json", exclude={"rating", "review_count"})
+
+    parsed = ListingSnapshot.model_validate(old_payload)
+
+    assert (parsed.rating, parsed.review_count) == (None, 0)
 
 
 async def test_consumer_applies_events_from_the_catalog_exchange(db: Database) -> None:
