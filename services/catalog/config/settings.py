@@ -38,6 +38,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "apps.common.logs.RequestIdMiddleware",
+    "apps.common.metrics.MetricsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -194,9 +196,28 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# Prometheus endpoint of processes without an HTTP server (outbox relay, event consumer).
+METRICS_PORT = env.int("METRICS_PORT", default=9100)
+
+# JSON lines with the gateway's request id (or the event id in consumers).
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "filters": {"request_id": {"()": "apps.common.logs.RequestIdFilter"}},
+    "formatters": {
+        "json": {
+            "()": "pythonjsonlogger.json.JsonFormatter",
+            "fmt": "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s",
+            "rename_fields": {"asctime": "time", "levelname": "level", "name": "logger"},
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "filters": ["request_id"],
+        }
+    },
     "root": {"handlers": ["console"], "level": env("LOG_LEVEL", default="INFO")},
 }
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False  # keep the JSON format in Celery workers

@@ -5,8 +5,10 @@ from typing import Any
 from uuid import UUID
 
 from django.db import DatabaseError, close_old_connections, connection, transaction
+from django.db.models import Count, Min
 from django.utils import timezone
 
+from apps.common.metrics import OUTBOX_OLDEST_AGE, OUTBOX_PENDING, OUTBOX_PUBLISHED
 from apps.outbox.models import OutboxEvent
 from apps.outbox.publisher import Publisher, PublishError
 
@@ -64,6 +66,7 @@ def outbox_relay_forever(
         close_old_connections()
         try:
             sent = outbox_relay_batch(publisher=publisher, batch_size=batch_size)
+            _measure_backlog()
         except (PublishError, DatabaseError) as exc:
             logger.warning("Relay failed, retrying in %.1fs: %s", backoff, exc)
             stop.wait(backoff)
@@ -71,10 +74,21 @@ def outbox_relay_forever(
             continue
 
         backoff = poll_interval
+        OUTBOX_PUBLISHED.inc(sent)
         if sent:
             logger.info("Published %d event(s)", sent)
         if sent < batch_size:
             stop.wait(poll_interval)
+
+
+def _measure_backlog() -> None:
+    """Kept current on every pass, so a growing backlog shows while it grows."""
+    backlog = OutboxEvent.objects.filter(published_at__isnull=True).aggregate(
+        count=Count("id"), oldest=Min("created_at")
+    )
+    OUTBOX_PENDING.set(backlog["count"])
+    oldest = backlog["oldest"]
+    OUTBOX_OLDEST_AGE.set((timezone.now() - oldest).total_seconds() if oldest else 0)
 
 
 def outbox_purge_published(*, older_than: timedelta = PUBLISHED_RETENTION) -> int:

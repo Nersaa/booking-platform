@@ -96,3 +96,16 @@ async def purge_published(session: AsyncSession) -> int:
         .returning(OutboxEvent.id)
     )
     return len(result.all())
+
+
+async def backlog(session: AsyncSession) -> tuple[int, float]:
+    """How many events wait to be published, and the age of the oldest in seconds."""
+    count, oldest = (
+        await session.execute(
+            select(
+                func.count(),
+                func.extract("epoch", func.now() - func.min(OutboxEvent.created_at)),
+            ).where(OutboxEvent.published_at.is_(None))
+        )
+    ).one()
+    return count, float(oldest or 0)

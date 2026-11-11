@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from app import idempotency, outbox
 from app.bookings.service import complete_finished_stays, expire_stale_holds
 from app.db import Database
+from app.metrics import JOB_FAILURES, OUTBOX_OLDEST_AGE, OUTBOX_PENDING, OUTBOX_PUBLISHED
 from app.payments.provider import PaymentProvider
 from app.payments.service import submit_pending_refunds
 
@@ -29,6 +30,7 @@ class BackgroundJobs:
     def start(self) -> None:
         schedule: dict[str, tuple[Job, float]] = {
             "relay outbox": (self.relay_outbox, 0.5),
+            "measure outbox": (self.measure_outbox, 5),
             "expire holds": (self.expire_holds, 30),
             "submit refunds": (self.submit_refunds, 15),
             "complete stays": (self.complete_stays, 600),
@@ -45,7 +47,16 @@ class BackgroundJobs:
         await asyncio.gather(*self._tasks, return_exceptions=True)
 
     async def relay_outbox(self) -> int:
-        return await outbox.relay_batch(self._db.sessions, self._publish)
+        sent = await outbox.relay_batch(self._db.sessions, self._publish)
+        OUTBOX_PUBLISHED.inc(sent)
+        return sent
+
+    async def measure_outbox(self) -> int:
+        async with self._db.sessions() as session:
+            pending, oldest_seconds = await outbox.backlog(session)
+        OUTBOX_PENDING.set(pending)
+        OUTBOX_OLDEST_AGE.set(oldest_seconds)
+        return 0
 
     async def expire_holds(self) -> int:
         async with self._db.sessions.begin() as session:
@@ -70,5 +81,6 @@ class BackgroundJobs:
                     logger.info("%s: %d", name, done)
             except Exception:
                 # One failing run (database restart, broker down) must not kill the loop.
+                JOB_FAILURES.labels(name).inc()
                 logger.warning("Job '%s' failed", name, exc_info=True)
             await asyncio.sleep(seconds)

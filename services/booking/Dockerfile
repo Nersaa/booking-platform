@@ -17,15 +17,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 
 FROM python:3.13-slim AS runtime
+# Metrics of all worker processes are merged from this directory (a tmpfs in Compose).
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PROMETHEUS_MULTIPROC_DIR=/tmp/metrics
 
 RUN groupadd --system app \
-    && useradd --system --gid app --home-dir /app --no-create-home app
+    && useradd --system --gid app --home-dir /app --no-create-home app \
+    && install -d -o app -g app /tmp/metrics
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --chown=app:app services/booking/alembic.ini /app/
+COPY --chown=app:app services/booking/alembic.ini services/booking/logging.json /app/
 COPY --chown=app:app services/booking/migrations /app/migrations
 COPY --chown=app:app services/booking/app /app/app
 WORKDIR /app
@@ -33,4 +36,5 @@ USER app
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*"]
+     "--workers", "2", "--proxy-headers", "--forwarded-allow-ips", "*", \
+     "--log-config", "logging.json"]

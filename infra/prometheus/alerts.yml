@@ -1,0 +1,54 @@
+groups:
+  - name: platform
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is not answering scrapes"
+
+      - alert: HighErrorRate
+        expr: |
+          sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+            / sum by (job) (rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }}: {{ $value | humanizePercentage }} of requests fail with 5xx"
+
+      - alert: SlowResponses
+        expr: |
+          histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }}: p95 latency is {{ $value | humanizeDuration }}"
+
+      # Other services see changes only through events; a stuck outbox means stale
+      # search results or missing emails.
+      - alert: OutboxLagging
+        expr: outbox_oldest_pending_seconds > 60
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }}: oldest unpublished event is {{ $value | humanizeDuration }} old"
+
+      - alert: DeadLetteredEvents
+        expr: rabbitmq_detailed_queue_messages_ready{queue=~".+[.]dlq"} > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} event(s) in {{ $labels.queue }} need a look"
+
+      - alert: BackgroundJobFailing
+        expr: increase(background_job_failures_total[10m]) > 3
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job '{{ $labels.name }}' failed {{ $value }} times in 10 minutes"

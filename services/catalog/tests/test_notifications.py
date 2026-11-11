@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from contracts import BookingEvent, BookingEventType, BookingSnapshot, CancelledBy
 from django.core import mail
+from prometheus_client import REGISTRY
 
 from apps.notifications.consumer import BookingEventConsumer
 from apps.notifications.models import ProcessedEvent
@@ -114,6 +115,11 @@ def test_completed_stay_opens_a_review_and_invites_only_the_guest(
     assert "until 18 Jul 2030" in invitation.body
 
 
+def consumed(event_type: str, result: str) -> float:
+    labels = {"event_type": event_type, "result": result}
+    return REGISTRY.get_sample_value("events_consumed_total", labels) or 0.0
+
+
 class FakeMessage:
     def __init__(self) -> None:
         self.outcome: str | None = None
@@ -133,6 +139,8 @@ def test_consumer_acks_handled_events_and_rejects_garbage(stay):
     listing, guest = stay
     consumer = BookingEventConsumer(connection=None)
     good, bad = FakeMessage(), FakeMessage()
+    handled = consumed("booking.completed", "handled")
+    rejected = consumed("unknown", "rejected")
 
     consumer.on_message(
         event(listing, guest, BookingEventType.COMPLETED).model_dump(mode="json"), good
@@ -141,6 +149,8 @@ def test_consumer_acks_handled_events_and_rejects_garbage(stay):
 
     assert good.outcome == "ack"
     assert bad.outcome == "reject"
+    assert consumed("booking.completed", "handled") == handled + 1
+    assert consumed("unknown", "rejected") == rejected + 1
 
 
 @pytest.mark.django_db(transaction=True)

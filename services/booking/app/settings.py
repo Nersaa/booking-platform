@@ -2,11 +2,12 @@ from functools import cache
 from typing import Annotated
 
 from pydantic import BeforeValidator, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, NoDecode
 
 from app.ratelimit import Rate
 
-RateSetting = Annotated[Rate, BeforeValidator(Rate.parse)]
+# NoDecode: the environment holds "60/minute", not JSON.
+RateSetting = Annotated[Rate, NoDecode, BeforeValidator(Rate.parse)]
 
 
 class Settings(BaseSettings):
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
     booking_rate_limit: RateSetting = Rate(20, 60)
 
     log_level: str = "INFO"
+    metrics_port: int = Field(9100, description="Worker metrics for Prometheus.")
 
 
 @cache

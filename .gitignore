@@ -28,3 +28,6 @@ celerybeat-schedule*
 build/
 dist/
 *.egg-info/
+
+# Load test reports
+loadtest/results/

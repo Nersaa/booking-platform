@@ -15,6 +15,8 @@ from app.bookings.router import host_router as host_bookings_router
 from app.cache import ResponseCache
 from app.db import Database
 from app.errors import register_error_handlers
+from app.logs import RequestIdMiddleware
+from app.metrics import MetricsMiddleware, metrics_endpoint
 from app.payments.provider import HttpPaymentProvider
 from app.payments.router import router as payments_router
 from app.ratelimit import RateLimiter
@@ -60,6 +62,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     register_error_handlers(app)
+    app.add_middleware(MetricsMiddleware)
+    app.add_middleware(RequestIdMiddleware)  # outermost: error responses get the id too
+    # Scraped inside the Docker network only; the gateway does not route it.
+    app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
     app.include_router(health.router)
     app.include_router(search_router)
     app.include_router(public_router)

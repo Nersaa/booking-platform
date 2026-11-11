@@ -5,6 +5,7 @@ from fastapi.responses import Response
 
 from app.cache import ResponseCache, cache_key
 from app.db import SessionDep
+from app.metrics import SEARCH_CACHE
 from app.pagination import Page
 from app.ratelimit import LimitPerClient
 from app.search import service
@@ -32,6 +33,8 @@ async def search_listings(
 
     body = await cache.get(key) if ttl else None
     status = "HIT" if body is not None else "MISS"
+    if ttl:
+        SEARCH_CACHE.labels(status.lower()).inc()
     if body is None:
         body = (await service.search(session, params)).model_dump_json().encode()
         if ttl:

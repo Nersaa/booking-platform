@@ -24,13 +24,15 @@ RUN DJANGO_SECRET_KEY=build-only DATABASE_URL=sqlite:// REDIS_URL=redis://localh
 
 
 FROM python:3.13-slim AS runtime
+# Metrics of all worker processes are merged from this directory (a tmpfs in Compose).
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PROMETHEUS_MULTIPROC_DIR=/tmp/metrics
 
 RUN groupadd --system app \
     && useradd --system --gid app --home-dir /app --no-create-home app \
-    && install -d -o app -g app /var/lib/catalog/keys
+    && install -d -o app -g app /var/lib/catalog/keys /tmp/metrics
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder --chown=app:app /app /app
@@ -38,4 +40,5 @@ WORKDIR /app
 USER app
 
 EXPOSE 8000
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--access-logfile", "-"]
+# No access log here: the gateway logs every request with its id.
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]

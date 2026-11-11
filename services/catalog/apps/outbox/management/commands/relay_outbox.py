@@ -8,6 +8,7 @@ from contracts import CATALOG_EXCHANGE
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from apps.common import metrics
 from apps.outbox.publisher import AmqpPublisher
 from apps.outbox.services import outbox_relay_forever
 
@@ -28,6 +29,7 @@ class Command(BaseCommand):
         for sig in (signal.SIGINT, signal.SIGTERM):
             signal.signal(sig, lambda *_: stop.set())
 
+        metrics.serve(settings.METRICS_PORT)
         publisher = AmqpPublisher(settings.EVENT_BUS_URL, CATALOG_EXCHANGE)
         logger.info("Outbox relay started")
         try:

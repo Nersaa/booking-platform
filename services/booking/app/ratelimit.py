@@ -20,6 +20,7 @@ from redis.exceptions import RedisError
 
 from app.auth import Principal, current_principal
 from app.errors import DomainError
+from app.metrics import RATE_LIMITED
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ async def _enforce(request: Request, scope: str, identity: str) -> None:
     limiter: RateLimiter = request.app.state.rate_limiter
     decision = await limiter.hit(f"{scope}:{identity}", rate)
     if not decision.allowed:
+        RATE_LIMITED.labels(scope).inc()
         raise RateLimitedError(decision, rate)
 
 

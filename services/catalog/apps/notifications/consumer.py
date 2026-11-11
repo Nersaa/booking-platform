@@ -10,6 +10,8 @@ from kombu.message import Message
 from kombu.mixins import ConsumerMixin
 from pydantic import ValidationError
 
+from apps.common.logs import request_id
+from apps.common.metrics import EVENTS_CONSUMED
 from apps.notifications.services import handle_booking_event
 
 logger = logging.getLogger(__name__)
@@ -52,17 +54,21 @@ class BookingEventConsumer(ConsumerMixin):
             event = BookingEvent.model_validate(body)
         except ValidationError:
             logger.exception("Malformed booking event, sending to the dead-letter queue")
+            EVENTS_CONSUMED.labels("unknown", "rejected").inc()
             message.reject()
             return
 
         close_old_connections()
+        request_id.set(str(event.event_id))
         try:
             handled = handle_booking_event(event)
         except Exception:
             logger.exception("Failed to handle %s %s, will retry", event.event_type, event.event_id)
+            EVENTS_CONSUMED.labels(event.event_type, "retried").inc()
             message.requeue()
             return
         message.ack()
+        EVENTS_CONSUMED.labels(event.event_type, "handled" if handled else "duplicate").inc()
         logger.info(
             "%s %s %s", event.event_type, event.event_id, "handled" if handled else "duplicate"
         )

@@ -29,6 +29,7 @@ from app.bookings.models import Booking, BookingStatus
 from app.bookings.policy import refund_amount
 from app.bookings.schemas import BookingIn
 from app.errors import ConflictError, DomainError, NotFoundError
+from app.metrics import BOOKING_STATUS_CHANGES
 from app.outbox import outbox_add
 from app.pagination import Keyset
 from app.payments.refunds import schedule_refund
@@ -56,6 +57,7 @@ def _transition(booking: Booking, target: BookingStatus) -> None:
     booking.status = target
     if target is not S.PENDING_PAYMENT:
         booking.hold_expires_at = None
+    BOOKING_STATUS_CHANGES.labels(target).inc()
 
 
 async def create_booking(
@@ -91,6 +93,7 @@ async def create_booking(
             raise DatesUnavailableError("Some of the selected nights were just booked.") from exc
         raise
     await session.refresh(booking)
+    BOOKING_STATUS_CHANGES.labels(S.PENDING_PAYMENT).inc()
     return booking
 
 

@@ -4,7 +4,8 @@ Backend for a short-term rental marketplace: hosts publish apartments and houses
 guests search by map and dates and book with prepayment. The core engineering goal is
 that the same dates can never be sold twice, even under heavy concurrent load.
 
-> Work in progress. Stages 1 to 4 are done; see the [roadmap](#roadmap).
+All five stages of the [roadmap](#roadmap) are done; load test results are in
+[docs/load-testing.md](docs/load-testing.md).
 
 ## Architecture
 
@@ -24,6 +25,10 @@ flowchart LR
     catalog --> s3
     booking <-- API + signed webhooks --> pay[Payment provider<br/>mock]
     catalog -- email --> smtp[SMTP<br/>Mailpit]
+    prom[Prometheus] -. scrapes .-> catalog
+    prom -.-> booking
+    prom -.-> mq
+    grafana[Grafana] --> prom
 ```
 
 | Service | Owns | Why this framework |
@@ -65,8 +70,8 @@ at least once and consumers are idempotent (by `version` and by processed event 
 
 Python 3.13 · Django 5.2 · DRF · FastAPI · SQLAlchemy 2 (async) · Alembic · FastStream ·
 PostgreSQL 17 + PostGIS · Redis · RabbitMQ · Celery · S3-compatible storage (RustFS
-locally) · Mailpit · Nginx · Docker Compose · uv · ruff · mypy · pytest + Testcontainers ·
-GitHub Actions
+locally) · Mailpit · Nginx · Prometheus · Grafana · Locust · Docker Compose · uv · ruff ·
+mypy · pytest + Testcontainers · GitHub Actions · GHCR
 
 ## Quick start
 
@@ -86,6 +91,8 @@ docker compose exec catalog-api python manage.py createsuperuser
 | http://localhost/.well-known/jwks.json | Public keys for JWT verification |
 | http://localhost:8025 | Mailpit: every email the platform sends |
 | http://localhost:8090/docs | Payment provider mock |
+| http://localhost:3000 | Grafana: the "Booking Platform" dashboard (admin / `GRAFANA_ADMIN_PASSWORD` from `.env`) |
+| http://localhost:9090 | Prometheus: targets and alerts |
 | http://localhost:15672 | RabbitMQ management |
 | http://localhost:9001 | Object storage console |
 
@@ -216,6 +223,22 @@ stateDiagram-v2
 3. `POST .../complete` queues a Celery task that validates the image, renders WebP
    variants without EXIF (no GPS leaks) and deletes the private original.
 
+## Operations
+
+- **Metrics**: every process exports Prometheus metrics: request rate, errors and latency by
+  route, booking status changes, cache hits, rate-limited requests, outbox lag, events
+  consumed, queue depth.
+- **Dashboard and alerts**: Grafana and the alert rules are provisioned from
+  [`infra/`](infra). Alerts fire on 5xx above 5%, p95 above 1 s, outbox lag above 60 s,
+  dead-lettered events, failing jobs and dead targets.
+- **Logs**: JSON lines with the `X-Request-ID` the gateway assigns, from Nginx through the
+  service that handled the request ([ADR 11](docs/adr/0011-observability.md)).
+- **Load testing**: Locust scenario, seed data and results in
+  [docs/load-testing.md](docs/load-testing.md).
+- **Images**: CI publishes `catalog`, `booking` and `payment-mock` to GitHub Container
+  Registry on every push to `main`, tagged with the commit SHA and `latest`, with SBOM
+  and provenance attestations.
+
 ## Development
 
 Each service is its own uv project; `libs/contracts` is installed into Catalog and Booking
@@ -245,5 +268,6 @@ Install the git hooks once with `uvx pre-commit install`.
 - [x] **Stage 4. Search and reviews:** PostGIS search by map area or radius with dates
   and filters, keyset pagination, Redis caching, GCRA rate limiting, reviews from
   completed stays feeding the rating.
-- [ ] **Stage 5. Load and operations:** Locust results, metrics and dashboards,
-  image publishing.
+- [x] **Stage 5. Load and operations:** Prometheus metrics in every process, Grafana
+  dashboard and alert rules, request ids in JSON logs, Locust load test with results,
+  images published to GHCR from CI.

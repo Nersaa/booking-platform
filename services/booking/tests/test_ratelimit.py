@@ -61,6 +61,20 @@ def test_rates_are_read_from_settings(value: str, rate: Rate) -> None:
     assert Rate.parse(value) == rate
 
 
+def test_rates_are_read_from_the_environment(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SEARCH_RATE_LIMIT", "30/second")
+
+    loaded = Settings(
+        database_url=settings.database_url,
+        payment_provider_api_key="key",
+        payment_webhook_secret="secret",
+    )
+
+    assert loaded.search_rate_limit == Rate(30, 1)
+
+
 def test_malformed_rate_settings_are_rejected(settings: Settings) -> None:
     with pytest.raises(ValueError, match="search_rate_limit"):
         Settings.model_validate({**settings.model_dump(), "search_rate_limit": "lots"})

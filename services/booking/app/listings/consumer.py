@@ -8,6 +8,8 @@ from faststream.rabbit import ExchangeType, QueueType, RabbitBroker, RabbitExcha
 
 from app.db import Database
 from app.listings.sync import apply_listing_snapshot
+from app.logs import request_id
+from app.metrics import EVENTS_CONSUMED
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +35,10 @@ def register_listing_consumer(broker: RabbitBroker, db: Database) -> None:
     # NACK_ON_ERROR requeues on failure, so a database outage only delays processing.
     @broker.subscriber(LISTING_EVENTS_QUEUE, CATALOG_EVENTS, ack_policy=AckPolicy.NACK_ON_ERROR)
     async def on_listing_event(event: ListingEvent) -> None:
+        request_id.set(str(event.event_id))  # each message runs in its own task
         async with db.sessions.begin() as session:
             applied = await apply_listing_snapshot(session, event.listing)
+        EVENTS_CONSUMED.labels(event.event_type, "applied" if applied else "stale").inc()
         logger.info(
             "%s %s v%d: %s",
             event.event_type,

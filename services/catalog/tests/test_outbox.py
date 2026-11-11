@@ -8,6 +8,7 @@ import pytest
 from django.db import transaction
 from django.utils import timezone
 from kombu import Connection, Exchange, Queue
+from prometheus_client import REGISTRY
 
 from apps.outbox.models import OutboxEvent
 from apps.outbox.publisher import AmqpPublisher, PublishError
@@ -97,6 +98,18 @@ def test_relay_loop_drains_events_then_polls():
 
     assert len(publisher.sent) == 3  # full batch, then the rest without waiting
     assert stop.waited == [0.5]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_relay_loop_reports_published_events_and_backlog():
+    published = REGISTRY.get_sample_value("outbox_published_events_total") or 0
+    add_events(3)
+
+    outbox_relay_forever(publisher=FakePublisher(), stop=StopAfter(waits=1), batch_size=2)
+
+    assert REGISTRY.get_sample_value("outbox_published_events_total") == published + 3
+    assert REGISTRY.get_sample_value("outbox_pending_events") == 0
+    assert REGISTRY.get_sample_value("outbox_oldest_pending_seconds") == 0
 
 
 @pytest.mark.django_db(transaction=True)  # the loop recycles DB connections

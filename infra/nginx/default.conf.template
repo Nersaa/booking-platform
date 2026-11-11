@@ -1,7 +1,17 @@
+# Rendered by the nginx image at start: only ${GATEWAY_*} variables are substituted.
+
 # Coarse flood protection at the edge; finer per-user and per-endpoint limits live in
 # the services.
-limit_req_zone $binary_remote_addr zone=per_ip:10m rate=20r/s;
+limit_req_zone $binary_remote_addr zone=per_ip:10m rate=${GATEWAY_RATE_LIMIT};
 limit_req_status 429;
+
+# One JSON line per request; request_id is passed to the services and logged there too.
+log_format json escape=json '{"time":"$time_iso8601","request_id":"$request_id",'
+    '"client":"$remote_addr","method":"$request_method","uri":"$request_uri",'
+    '"status":$status,"bytes":$body_bytes_sent,"duration":$request_time,'
+    '"upstream":"$upstream_addr","upstream_duration":"$upstream_response_time",'
+    '"user_agent":"$http_user_agent"}';
+access_log /var/log/nginx/access.log json;
 
 upstream catalog {
     server catalog-api:8000;
@@ -20,7 +30,7 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
 
-    limit_req zone=per_ip burst=40 nodelay;
+    limit_req zone=per_ip burst=${GATEWAY_RATE_BURST} nodelay;
 
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -28,6 +38,12 @@ server {
     # pick their own address and walk around per-IP rate limits.
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-ID $request_id;
+
+    # Metrics are scraped inside the Docker network only.
+    location = /metrics {
+        return 404;
+    }
 
     # Processed listing photos. The bucket only allows anonymous reads under public/.
     location /media/ {
