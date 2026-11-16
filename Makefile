@@ -38,24 +38,24 @@ format:
 test: test-catalog test-booking test-payment-mock
 
 test-catalog:
-	cd services/catalog && uv run --frozen pytest
+	cd backend/catalog && uv run --frozen python -m pytest
 
 test-booking:
-	cd services/booking && uv run --frozen pytest
+	cd backend/booking && uv run --frozen python -m pytest
 
 test-payment-mock:
-	cd services/payment-mock && uv run --frozen pytest
+	cd backend/payment-mock && uv run --frozen python -m pytest
 
 typecheck: typecheck-catalog typecheck-booking typecheck-payment-mock
 
 typecheck-catalog:
-	cd services/catalog && uv run --frozen mypy .
+	cd backend/catalog && uv run --frozen python -m mypy .
 
 typecheck-booking:
-	cd services/booking && uv run --frozen mypy .
+	cd backend/booking && uv run --frozen python -m mypy .
 
 typecheck-payment-mock:
-	cd services/payment-mock && uv run --frozen mypy .
+	cd backend/payment-mock && uv run --frozen python -m mypy .
 
 superuser:
 	docker compose exec catalog-api python manage.py createsuperuser

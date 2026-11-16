@@ -15,23 +15,9 @@
   },
   "panels": [
     {
-      "type": "row",
-      "title": "Overview",
-      "collapsed": false,
-      "panels": [],
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1
-    },
-    {
-      "id": 2,
+      "id": 1,
       "type": "stat",
-      "title": "Requests / s",
-      "description": "",
+      "title": "Booking API: requests / s",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -40,12 +26,12 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 1
+        "y": 0
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(http_requests_total{job=~\"catalog-api|booking-api\"}[1m]))",
+          "expr": "sum(rate(http_requests_total{job=\"booking-api\"}[1m]))",
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
@@ -66,17 +52,13 @@
           ],
           "fields": "",
           "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto"
+        }
       }
     },
     {
-      "id": 3,
+      "id": 2,
       "type": "stat",
-      "title": "5xx errors",
-      "description": "",
+      "title": "Catalog API: requests / s",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -85,12 +67,12 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 1
+        "y": 0
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(rate(http_requests_total{job=~\"catalog-api|booking-api\",status=~\"5..\"}[5m])) or vector(0)) / sum(rate(http_requests_total{job=~\"catalog-api|booking-api\"}[5m]))",
+          "expr": "sum(rate(django_http_requests_total_by_view_transport_method_total[1m]))",
           "legendFormat": "",
           "datasource": {
             "type": "prometheus",
@@ -100,24 +82,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 0.01
-              },
-              {
-                "color": "red",
-                "value": 0.05
-              }
-            ]
-          }
+          "unit": "reqps"
         },
         "overrides": []
       },
@@ -128,17 +93,13 @@
           ],
           "fields": "",
           "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto"
+        }
       }
     },
     {
-      "id": 4,
+      "id": 3,
       "type": "stat",
-      "title": "p95 latency",
-      "description": "",
+      "title": "Bookings confirmed (last hour)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -147,69 +108,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 1
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job=~\"catalog-api|booking-api\"}[5m])))",
-          "legendFormat": "",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 0.5
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto"
-      }
-    },
-    {
-      "id": 5,
-      "type": "stat",
-      "title": "Bookings confirmed (1h)",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 1
+        "y": 0
       },
       "targets": [
         {
@@ -224,8 +123,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "decimals": 0
+          "unit": "short"
         },
         "overrides": []
       },
@@ -236,45 +134,28 @@
           ],
           "fields": "",
           "values": false
-        },
-        "colorMode": "value",
-        "graphMode": "area",
-        "textMode": "auto"
+        }
       }
     },
     {
-      "type": "row",
-      "title": "Traffic",
-      "collapsed": false,
-      "panels": [],
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 5
-      },
-      "id": 6
-    },
-    {
-      "id": 7,
-      "type": "timeseries",
-      "title": "Requests / s by service",
-      "description": "",
+      "id": 4,
+      "type": "stat",
+      "title": "Messages waiting in RabbitMQ",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 6
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (job) (rate(http_requests_total{job=~\"catalog-api|booking-api\"}[1m]))",
-          "legendFormat": "{{job}}",
+          "expr": "sum(rabbitmq_detailed_queue_messages_ready{queue!~\"celery.*\"})",
+          "legendFormat": "",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -283,79 +164,24 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
+          "unit": "short"
         },
         "overrides": []
       },
       "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         }
       }
     },
     {
-      "id": 8,
+      "id": 5,
       "type": "timeseries",
-      "title": "p95 latency by service",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 6
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=~\"catalog-api|booking-api\"}[1m])))",
-          "legendFormat": "{{job}}",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 9,
-      "type": "timeseries",
-      "title": "p95 latency by route (top 8)",
-      "description": "Booking labels routes by template, Catalog by URL name.",
+      "title": "Booking API: requests / s by status",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -364,60 +190,12 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 4
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "topk(8, histogram_quantile(0.95, sum by (job, route, le) (rate(http_request_duration_seconds_bucket{job=~\"catalog-api|booking-api\"}[5m]))))",
-          "legendFormat": "{{route}}",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 10,
-      "type": "timeseries",
-      "title": "Responses by status class",
-      "description": "409: dates already taken. 429: rate limited. 5xx: bugs or outages.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 14
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (status) (rate(http_requests_total{job=~\"catalog-api|booking-api\",status=~\"[45]..\"}[1m]))",
+          "expr": "sum by (status) (rate(http_requests_total{job=\"booking-api\"}[1m]))",
           "legendFormat": "{{status}}",
           "datasource": {
             "type": "prometheus",
@@ -427,53 +205,129 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
+          "unit": "reqps"
         },
         "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
       }
     },
     {
-      "type": "row",
-      "title": "Bookings",
-      "collapsed": false,
-      "panels": [],
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 22
-      },
-      "id": 11
-    },
-    {
-      "id": 12,
+      "id": 6,
       "type": "timeseries",
-      "title": "Booking status changes / min",
-      "description": "",
+      "title": "Catalog API: responses / s by status",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(django_http_responses_total_by_status_view_method_total[1m]))",
+          "legendFormat": "{{status}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "p95 latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
         "x": 0,
-        "y": 23
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_highr_seconds_bucket{job=\"booking-api\"}[5m])))",
+          "legendFormat": "booking-api",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(django_http_requests_latency_including_middlewares_seconds_bucket[5m])))",
+          "legendFormat": "catalog-api",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Booking API: average time by endpoint",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (handler) (rate(http_request_duration_seconds_sum{job=\"booking-api\"}[5m])) / sum by (handler) (rate(http_request_duration_seconds_count{job=\"booking-api\"}[5m]))",
+          "legendFormat": "{{handler}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Bookings by status / min",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
       },
       "targets": [
         {
@@ -488,286 +342,15 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
+          "unit": "short"
         },
         "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
       }
     },
     {
-      "id": 13,
+      "id": 10,
       "type": "timeseries",
-      "title": "Search cache hit ratio",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 23
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(search_cache_requests_total{result=\"hit\"}[5m])) / sum(rate(search_cache_requests_total[5m]))",
-          "legendFormat": "hit ratio",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "min": 0,
-          "max": 1,
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 14,
-      "type": "timeseries",
-      "title": "Rate-limited requests / s",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 23
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (scope) (rate(rate_limited_requests_total[1m]))",
-          "legendFormat": "{{scope}}",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "type": "row",
-      "title": "Events",
-      "collapsed": false,
-      "panels": [],
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 31
-      },
-      "id": 15
-    },
-    {
-      "id": 16,
-      "type": "timeseries",
-      "title": "Outbox: oldest unpublished event",
-      "description": "How far other services lag behind. Alert above 60 s.",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 32
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "outbox_oldest_pending_seconds",
-          "legendFormat": "{{job}}",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 17,
-      "type": "timeseries",
-      "title": "Events published / s",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 32
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (job) (rate(outbox_published_events_total[1m]))",
-          "legendFormat": "{{job}}",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 18,
-      "type": "timeseries",
-      "title": "Events consumed / s",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 32
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (job, event_type, result) (rate(events_consumed_total[1m]))",
-          "legendFormat": "{{job}} {{event_type}} {{result}}",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ops",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 19,
-      "type": "timeseries",
-      "title": "Queue depth (messages ready)",
-      "description": "Dead-letter queues (*.dlq) should stay at zero.",
+      "title": "RabbitMQ: messages waiting per queue",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -775,13 +358,13 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
-        "y": 40
+        "x": 12,
+        "y": 20
       },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (queue) (rabbitmq_detailed_queue_messages_ready{queue!~\"celery.*\"})",
+          "expr": "rabbitmq_detailed_queue_messages_ready{queue!~\"celery.*\"}",
           "legendFormat": "{{queue}}",
           "datasource": {
             "type": "prometheus",
@@ -791,72 +374,9 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
+          "unit": "short"
         },
         "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 20,
-      "type": "timeseries",
-      "title": "Background job failures / min",
-      "description": "",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 40
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (name) (rate(background_job_failures_total[5m])) * 60",
-          "legendFormat": "{{name}}",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          }
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "fillOpacity": 10,
-            "lineWidth": 2,
-            "showPoints": "never"
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
       }
     }
   ],

@@ -34,30 +34,33 @@ to normal limits with `docker compose up -d`.
 
 ## Results
 
-Measured on 5 November 2026, the whole stack (16 containers) and Locust on one desktop:
+The whole stack (15 containers) and Locust on one desktop:
 Intel Core i7-10700K (8 cores, 16 threads), 64 GB RAM, Docker Desktop on Windows 11.
 300 listings in 8 cities. Default service sizes: Booking API 2 uvicorn workers, Catalog
 API 3 gunicorn workers. Times are in milliseconds, as seen by the client (Locust).
 
-### Run 1: a busy evening, 200 users, 5 minutes
+### Run 1: a busy evening, 200 users, 5 minutes (11 November 2026)
 
-**101 requests/s, 30,366 requests, 0 failures, p95 13 ms.**
+**96 requests/s, 28,564 requests, 0 failures, p95 12 ms.**
 
 | Request | Count | p50 | p95 | p99 |
 |---|---:|---:|---:|---:|
-| Search, map + dates | 6,992 | 4 | 13 | 17 |
-| Search, map | 6,256 | 3 | 6 | 10 |
-| Search, nearby | 1,511 | 3 | 7 | 10 |
-| Listing page (Catalog, cached) | 6,155 | 3 | 6 | 9 |
-| Calendar | 3,160 | 8 | 11 | 14 |
-| Quote | 3,071 | 7 | 10 | 13 |
-| Book | 828 | 14 | 20 | 24 |
-| Start payment | 750 | 14 | 20 | 26 |
-| Own bookings | 853 | 6 | 8 | 10 |
+| Search, map + dates | 7,169 | 4 | 14 | 19 |
+| Search, map | 6,276 | 4 | 6 | 13 |
+| Search, nearby | 1,549 | 4 | 9 | 21 |
+| Listing page (Catalog, cached) | 6,050 | 3 | 6 | 11 |
+| Calendar | 3,061 | 8 | 12 | 16 |
+| Quote | 3,072 | 8 | 11 | 15 |
+| Book | 192 | 15 | 21 | 28 |
+| Start payment | 160 | 14 | 22 | 36 |
+| Own bookings | 835 | 7 | 10 | 14 |
+
+Most of the popular weekends were already booked by earlier runs, so fewer searches found
+free places to book.
 
 The request rate is set by the users' think time (1 to 5 s), not by the system.
 
-### Run 2: stress, 1,000 users, 4 minutes
+### Run 2: stress, 1,000 users, 4 minutes (5 November 2026, previous version)
 
 **457 requests/s (Booking API peak 386/s), 109,430 requests, no 5xx, p95 630 ms.**
 
@@ -79,15 +82,11 @@ mock gave out, not the platform. Those two holds simply expire.
 | Check | Run 1 | Run 2 |
 |---|---|---|
 | 5xx responses | 0 | 0 |
-| Holds created / confirmed by payment webhook | 750 / 750 | 1,419 / 1,417 |
-| Booking attempts refused with 409 (dates taken) | 78 | 883 |
+| Bookings paid and confirmed by webhook | 160 | 1,417 |
+| Booking attempts refused with 409 (dates taken) | 32 | 883 |
 | Two active bookings sharing a night (SQL check after the run) | **0** | **0** |
-| Search cache hit ratio | 92.6% | 96.9% |
-| Longest outbox lag (oldest unpublished event) | 0.44 s | 0.56 s |
-| Messages in dead-letter queues | 0 | 0 |
 
-Under contention the platform refuses bookings instead of selling a night twice, and
-events keep flowing in well under a second.
+Under contention the platform refuses bookings instead of selling a night twice.
 
 ### Where the limit is
 

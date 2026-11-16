@@ -1,4 +1,4 @@
-# Load test mode: the stack with abuse limits lifted (all traffic comes from one load
+# Load test mode: the stack with rate limits lifted (all traffic comes from one load
 # generator, so per-address limits would measure the limiter, not the system) and a
 # Locust container. See docs/load-testing.md.
 #
@@ -6,11 +6,6 @@
 #   docker compose -f docker-compose.yml -f loadtest/docker-compose.yml run --rm locust
 
 services:
-  nginx:
-    environment:
-      GATEWAY_RATE_LIMIT: 100000r/s
-      GATEWAY_RATE_BURST: 100000
-
   catalog-api:
     environment:
       THROTTLE_AUTH_RATE: 100000/min
@@ -19,9 +14,9 @@ services:
 
   booking-api:
     environment:
-      SEARCH_RATE_LIMIT: 1000000/minute
-      PUBLIC_RATE_LIMIT: 1000000/minute
-      BOOKING_RATE_LIMIT: 1000000/minute
+      SEARCH_RATE_LIMIT: 1000000
+      PUBLIC_RATE_LIMIT: 1000000
+      BOOKING_RATE_LIMIT: 1000000
 
   locust:
     image: locustio/locust:2.42.0

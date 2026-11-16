@@ -1,17 +1,51 @@
 # Booking Platform
 
-Backend for a short-term rental marketplace: hosts publish apartments and houses,
-guests search by map and dates and book with prepayment. The core engineering goal is
-that the same dates can never be sold twice, even under heavy concurrent load.
+Backend for a short-term rental marketplace (like Booking.com or Airbnb): hosts publish
+apartments and houses, guests search on the map, book dates and pay. The main rule: the
+same night can never be sold twice, even when many guests book at the same moment.
 
-All five stages of the [roadmap](#roadmap) are done; load test results are in
-[docs/load-testing.md](docs/load-testing.md).
+Two services (Django and FastAPI) talk through RabbitMQ, a small React site shows the API
+at work, and everything runs with one `docker compose up`. Design notes: [docs/architecture.md](docs/architecture.md); load test
+results: [docs/load-testing.md](docs/load-testing.md).
+
+## Features
+
+- Accounts with JWT; hosts and guests.
+- Listings with photos uploaded straight to S3 storage, moderation in Django Admin.
+- Prices per night, weekends, seasons, discounts; calendar and price quotes.
+- Search by map area or distance, dates, guests, amenities, price and rating.
+- Bookings with a 15-minute hold, payments through a Stripe-like mock with signed
+  webhooks, cancellations with refunds by policy.
+- Emails on booking events, reviews after the stay, ratings in search.
+- Redis cache and rate limits, Prometheus metrics and a Grafana dashboard, Locust load
+  test, CI that tests the services and publishes Docker images.
+- A small website (React + TypeScript): search on the map, listing page, booking,
+  payment and "My bookings".
+
+## Project structure
+
+```
+backend/                 the main part: Python services
+  catalog/               Django + DRF: users, listings, photos, reviews, emails
+  booking/               FastAPI: search, prices, calendar, bookings, payments
+  payment-mock/          FastAPI: a fake Stripe-like payment provider for local runs
+  contracts/             event schemas shared by catalog and booking
+frontend/                React + TypeScript showcase website
+infra/                   configs: Nginx gateway, PostgreSQL init, Prometheus, Grafana
+loadtest/                Locust scenario and demo data seeding
+docs/                    architecture notes and load test results
+scripts/init_env.py      creates .env with random secrets
+docker-compose.yml       the whole stack in one command
+```
+
+See [backend/README.md](backend/README.md) for what is inside each service.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    client([Client]) --> nginx[Nginx gateway]
+    client([Browser]) --> nginx[Nginx gateway]
+    nginx --> web[Website<br/>React]
     nginx --> catalog[Catalog<br/>Django + DRF]
     nginx --> booking[Booking<br/>FastAPI]
     nginx -- /media --> s3[(S3 storage)]
@@ -25,9 +59,8 @@ flowchart LR
     catalog --> s3
     booking <-- API + signed webhooks --> pay[Payment provider<br/>mock]
     catalog -- email --> smtp[SMTP<br/>Mailpit]
-    prom[Prometheus] -. scrapes .-> catalog
+    prom[Prometheus] -. metrics .-> catalog
     prom -.-> booking
-    prom -.-> mq
     grafana[Grafana] --> prom
 ```
 
@@ -36,10 +69,9 @@ flowchart LR
 | **Catalog** | users and JWT issuing, listings, photos, moderation, reviews, notifications | Django Admin, auth, ORM and migrations out of the box: ideal for CRUD and a back-office |
 | **Booking** | search, availability, pricing, quotes, bookings, payments and refunds | async I/O and strict typing for the high-traffic path |
 
-Each service owns its database and services never call each other synchronously while
-serving a request. Booking verifies Catalog's JWTs locally with the public keys from JWKS
-and keeps its own copy of listing data, fed by events. Design decisions are recorded in
-[`docs/adr`](docs/adr).
+Each service has its own database. They don't call each other over HTTP: Booking checks
+Catalog's JWTs with Catalog's public key and keeps its own copy of the listings, updated
+by events.
 
 ### Event flow
 
@@ -47,31 +79,29 @@ and keeps its own copy of listing data, fed by events. Design decisions are reco
 sequenceDiagram
     participant C as Catalog
     participant DB as catalog DB
-    participant R as Outbox relay
+    participant R as Celery beat task
     participant MQ as RabbitMQ
     participant B as Booking worker
-    C->>DB: change listing + insert outbox row (one transaction)
-    R->>DB: SELECT pending FOR UPDATE SKIP LOCKED
-    R->>MQ: publish (persistent, mandatory, confirmed)
-    R->>DB: mark published
+    C->>DB: save listing + outbox event (one transaction)
+    R->>DB: take unsent events
+    R->>MQ: publish
+    R->>DB: mark as sent
     MQ->>B: listing.published / updated / archived
-    B->>B: upsert read model if version is newer
+    B->>B: update its copy if the version is newer
 ```
 
-Booking publishes `booking.confirmed`, `booking.cancelled` and `booking.completed` the
-same way. Catalog turns them into emails (it owns the contact details) and opens a
-review once a stay is completed; the new rating flows back to Booking in the next
-listing event ([ADR 10](docs/adr/0010-reviews-and-ratings.md)). Delivery is
-at least once and consumers are idempotent (by `version` and by processed event ids); see
-[ADR 4](docs/adr/0004-transactional-outbox.md). Event schemas are shared through
-[`libs/contracts`](libs/contracts).
+Booking sends `booking.confirmed`, `booking.cancelled` and `booking.completed` the same
+way; Catalog turns them into emails and opens a review after the stay. Event schemas are
+shared Pydantic models in [`backend/contracts`](backend/contracts).
 
 ## Tech stack
 
 Python 3.13 · Django 5.2 · DRF · FastAPI · SQLAlchemy 2 (async) · Alembic · FastStream ·
 PostgreSQL 17 + PostGIS · Redis · RabbitMQ · Celery · S3-compatible storage (RustFS
 locally) · Mailpit · Nginx · Prometheus · Grafana · Locust · Docker Compose · uv · ruff ·
-mypy · pytest + Testcontainers · GitHub Actions · GHCR
+mypy · pytest + Testcontainers · GitHub Actions
+
+Website: React 19 · TypeScript · Vite · React Router · TanStack Query · Leaflet
 
 ## Quick start
 
@@ -83,8 +113,11 @@ docker compose up -d --build
 docker compose exec catalog-api python manage.py createsuperuser
 ```
 
+To fill the site with demo listings (300 places in 8 cities): `python loadtest/seed.py`.
+
 | URL | What |
 |---|---|
+| http://localhost/ | The website |
 | http://localhost/api/docs/catalog/ | Catalog API (Swagger UI) |
 | http://localhost/api/docs/booking/ | Booking API (Swagger UI) |
 | http://localhost/admin/ | Moderation desk (Django Admin) |
@@ -92,9 +125,23 @@ docker compose exec catalog-api python manage.py createsuperuser
 | http://localhost:8025 | Mailpit: every email the platform sends |
 | http://localhost:8090/docs | Payment provider mock |
 | http://localhost:3000 | Grafana: the "Booking Platform" dashboard (admin / `GRAFANA_ADMIN_PASSWORD` from `.env`) |
-| http://localhost:9090 | Prometheus: targets and alerts |
+| http://localhost:9090 | Prometheus |
 | http://localhost:15672 | RabbitMQ management |
 | http://localhost:9001 | Object storage console |
+
+## Website
+
+A deliberately small showcase of the API in [`frontend/`](frontend); the backend is the
+main part of this project.
+
+- **Search**: filters and a map with price tags; "Search this area" searches what the
+  map shows. Filters live in the URL, so a search can be shared.
+- **Listing**: photos, amenities, reviews, free nights for six weeks and the price for
+  the chosen dates.
+- **Booking**: log in or register, book, pay on the provider's page; the status turns to
+  "Confirmed" when the payment webhook arrives. Cancel to see the refund.
+
+Hosts manage listings through the API (Swagger) and moderators through Django Admin.
 
 ## API
 
@@ -113,7 +160,7 @@ owning service by Nginx.
 | POST | `/api/v1/users/me/host` | user | Become a host (returns tokens with the new role) |
 | GET | `/api/v1/amenities` | anyone | Amenity dictionary |
 | GET | `/api/v1/listings/{id}` | anyone | Published listing with its rating (cached) |
-| GET | `/api/v1/listings/{id}/reviews` | anyone | Reviews, newest first (cursor pages) |
+| GET | `/api/v1/listings/{id}/reviews` | anyone | Reviews, newest first (`page`, `page_size`) |
 | GET | `/api/v1/reviews/pending` | user | Own finished stays that can still be reviewed |
 | POST | `/api/v1/reviews` | user | Review a finished stay: 1 to 5 and a text, once, within 14 days |
 | POST | `/api/v1/host/reviews/{id}/reply` | host | Reply publicly to a review, once |
@@ -131,7 +178,7 @@ Amounts are integers in minor units (cents). Periods are `[start_date, end_date)
 
 | Method | Path | Who | Description |
 |---|---|---|---|
-| GET | `/api/v1/listings` | anyone | Search: map area or point, dates, filters, sorting, cursor pages |
+| GET | `/api/v1/listings` | anyone | Search: map area or point, dates, filters, sorting |
 | GET | `/api/v1/listings/{id}/calendar` | anyone | Nightly availability and prices |
 | GET | `/api/v1/listings/{id}/quote` | anyone | Price breakdown for `check_in`, `check_out`, `guests` |
 | GET, PUT | `/api/v1/host/listings/{id}/pricing` | host | Nightly, weekend price, cleaning fee, stay limits, discounts |
@@ -148,25 +195,20 @@ GET /api/v1/listings?bbox=-9.25,38.68,-9.08,38.80&check_in=2027-05-03&check_out=
 
 Other filters: `lat`, `lon`, `radius_km`, `country`, `city`, `property_type`,
 `min_bedrooms`, `min_rating`, `currency` with `min_price` / `max_price`; `sort` is
-`distance`, `price` or `rating`. Lists return `{"items": [...], "next_cursor": "..."}`;
-pass the cursor back to get the next page ([ADR 8](docs/adr/0008-search.md)).
+`distance`, `price` or `rating`. Lists take `limit` and `offset` and return
+`{"items": [...], "total": 42, "limit": 20, "offset": 0}`.
 
-A listing is bookable once it is published and priced. Overlaps are rejected by
-PostgreSQL exclusion constraints, so they hold under concurrent requests too
-([ADR 5](docs/adr/0005-availability-and-pricing-model.md)).
+A listing is bookable once it is published and priced.
 
 #### Bookings and payments
-
-Unsafe calls require an `Idempotency-Key` header; a retry with the same key returns the
-first response instead of doing the work twice.
 
 | Method | Path | Who | Description |
 |---|---|---|---|
 | POST | `/api/v1/bookings` | user | Book: prices the stay and holds the dates for 15 minutes |
-| GET | `/api/v1/bookings`, `/api/v1/bookings/{id}` | guest | Own bookings, newest first (cursor pages) |
+| GET | `/api/v1/bookings`, `/api/v1/bookings/{id}` | guest | Own bookings, newest first |
 | POST | `/api/v1/bookings/{id}/payments` | guest | Start a payment, get the checkout URL |
 | POST | `/api/v1/bookings/{id}/cancel` | guest | Cancel; refund by policy |
-| GET | `/api/v1/host/bookings`, `/api/v1/host/bookings/{id}` | host | Stays at own listings, by check-in (cursor pages) |
+| GET | `/api/v1/host/bookings`, `/api/v1/host/bookings/{id}` | host | Stays at own listings, by check-in date |
 | POST | `/api/v1/host/bookings/{id}/cancel` | host | Cancel; the guest gets a full refund |
 
 ```mermaid
@@ -179,11 +221,10 @@ stateDiagram-v2
     confirmed --> completed: after check-out
 ```
 
-Two active bookings can never overlap: a PostgreSQL exclusion constraint guarantees it
-under any concurrency ([ADR 6](docs/adr/0006-booking-consistency.md)). Payment outcomes
-arrive as HMAC-signed webhooks, processed exactly once; refunds are recorded with the
-cancellation and sent to the provider by a retrying job
-([ADR 7](docs/adr/0007-payments-and-webhooks.md)).
+Two active bookings can never overlap: a PostgreSQL exclusion constraint guarantees it,
+even for requests that arrive at the same moment. Payment results arrive as HMAC-signed
+webhooks, each processed once; refunds are sent to the provider when a booking is
+cancelled.
 
 Cancellation policy: host cancels → full refund; guest cancels 7+ days before check-in →
 full refund, 1 to 6 days → half, on the day → none.
@@ -195,11 +236,9 @@ Errors of all services follow [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)
 
 - Search pages are cached in Redis for 30 seconds (`X-Cache: HIT|MISS`); the listing page
   is cached until the listing changes. Calendar, quotes and bookings are never cached.
-- Nginx allows 20 requests/s per client address. Booking adds per-address limits on
-  search (60/min) and calendar/quote (120/min) and per-user limits on booking writes
-  (20/min), with GCRA in Redis. Excess requests get 429 with `Retry-After`.
-- Without Redis both fall back to serving uncached and unlimited
-  ([ADR 9](docs/adr/0009-caching-and-rate-limiting.md)).
+- Booking allows 60 searches and 120 calendar/quote requests per minute per client
+  address, and 20 booking actions per minute per user (a counter in Redis). Extra
+  requests get 429 with `Retry-After`. Catalog limits login and registration attempts.
 
 ### Listing lifecycle
 
@@ -223,51 +262,30 @@ stateDiagram-v2
 3. `POST .../complete` queues a Celery task that validates the image, renders WebP
    variants without EXIF (no GPS leaks) and deletes the private original.
 
-## Operations
+## Monitoring and load testing
 
-- **Metrics**: every process exports Prometheus metrics: request rate, errors and latency by
-  route, booking status changes, cache hits, rate-limited requests, outbox lag, events
-  consumed, queue depth.
-- **Dashboard and alerts**: Grafana and the alert rules are provisioned from
-  [`infra/`](infra). Alerts fire on 5xx above 5%, p95 above 1 s, outbox lag above 60 s,
-  dead-lettered events, failing jobs and dead targets.
-- **Logs**: JSON lines with the `X-Request-ID` the gateway assigns, from Nginx through the
-  service that handled the request ([ADR 11](docs/adr/0011-observability.md)).
-- **Load testing**: Locust scenario, seed data and results in
+- Both APIs expose Prometheus metrics; Grafana at http://localhost:3000 shows requests,
+  errors, latency, bookings and RabbitMQ queues ([`infra/`](infra)).
+- [`loadtest/`](loadtest) has a Locust scenario and a seed script; results are in
   [docs/load-testing.md](docs/load-testing.md).
-- **Images**: CI publishes `catalog`, `booking` and `payment-mock` to GitHub Container
-  Registry on every push to `main`, tagged with the commit SHA and `latest`, with SBOM
-  and provenance attestations.
+- CI runs linters, type checks and tests, then publishes the Docker images to GitHub
+  Container Registry from `main`.
 
 ## Development
 
-Each service is its own uv project; `libs/contracts` is installed into Catalog and Booking
-as an editable path dependency.
+Each service is its own uv project; `backend/contracts` is installed into Catalog and
+Booking as an editable path dependency.
 
 ```bash
-cd services/catalog    # or services/booking, services/payment-mock
+cd backend/catalog     # or backend/booking, backend/payment-mock
 uv sync
-uv run pytest          # starts PostgreSQL (RabbitMQ, Redis) via Testcontainers; Docker required
-uv run mypy .
+uv run python -m pytest  # starts PostgreSQL (RabbitMQ, Redis) via Testcontainers; Docker required
+uv run python -m mypy .
 ```
 
 From the repository root: `make lint`, `make test`, `make typecheck`.
 
+The website: `cd frontend && npm install && npm run dev` (http://localhost:5173, talks to
+the running Docker Compose stack).
+
 Install the git hooks once with `uvx pre-commit install`.
-
-## Roadmap
-
-- [x] **Stage 1. Foundation and Catalog:** monorepo, Docker Compose, CI, users, JWT
-  (RS256 + JWKS), listings, moderation, direct photo uploads.
-- [x] **Stage 2. Service integration:** transactional outbox → RabbitMQ → Booking read
-  model (FastAPI, FastStream, SQLAlchemy async, Alembic); JWT verification via JWKS;
-  calendar, pricing and quotes.
-- [x] **Stage 3. Bookings:** exclusion constraint against double booking, idempotency
-  keys, booking state machine, payment provider mock with HMAC webhooks, refunds,
-  booking events and emails.
-- [x] **Stage 4. Search and reviews:** PostGIS search by map area or radius with dates
-  and filters, keyset pagination, Redis caching, GCRA rate limiting, reviews from
-  completed stays feeding the rating.
-- [x] **Stage 5. Load and operations:** Prometheus metrics in every process, Grafana
-  dashboard and alert rules, request ids in JSON logs, Locust load test with results,
-  images published to GHCR from CI.

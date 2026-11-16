@@ -139,7 +139,6 @@ class Booker(HttpUser):
                 "check_out": check_out,
                 "guests": 2,
             },
-            headers={"Idempotency-Key": str(uuid.uuid4())},
             catch_response=True,
         ) as response:
             if response.status_code == 409:
@@ -151,7 +150,6 @@ class Booker(HttpUser):
 
         payment = self.client.post(
             f"/api/v1/bookings/{booking['id']}/payments",
-            headers={"Idempotency-Key": str(uuid.uuid4())},
             name="/api/v1/bookings/{id}/payments",
         )
         if payment.ok:
