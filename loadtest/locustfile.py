@@ -154,7 +154,13 @@ class Booker(HttpUser):
         )
         if payment.ok:
             checkout = payment.json()["checkout_url"].replace(CHECKOUT_PUBLIC_URL, CHECKOUT_URL)
-            self.client.post(f"{checkout}/pay", name="provider: pay")
+            # The provider's test card that always pays; it then redirects back to the site.
+            self.client.post(
+                checkout,
+                data={"card_number": "4242 4242 4242 4242"},
+                name="provider: pay",
+                allow_redirects=False,
+            )
 
     @task
     def my_bookings(self) -> None:

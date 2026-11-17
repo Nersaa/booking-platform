@@ -23,7 +23,14 @@ class ProviderPayment:
 
 class PaymentProvider(Protocol):
     async def create_payment(
-        self, *, amount: int, currency: str, reference: str, idempotency_key: str
+        self,
+        *,
+        amount: int,
+        currency: str,
+        reference: str,
+        idempotency_key: str,
+        description: str = "",
+        return_url: str | None = None,
     ) -> ProviderPayment: ...
 
     async def create_refund(
@@ -49,13 +56,23 @@ class HttpPaymentProvider:
         await self._client.aclose()
 
     async def create_payment(
-        self, *, amount: int, currency: str, reference: str, idempotency_key: str
+        self,
+        *,
+        amount: int,
+        currency: str,
+        reference: str,
+        idempotency_key: str,
+        description: str = "",
+        return_url: str | None = None,
     ) -> ProviderPayment:
-        data = await self._post(
-            "/v1/payments",
-            {"amount": amount, "currency": currency, "reference": reference},
-            idempotency_key,
-        )
+        body = {
+            "amount": amount,
+            "currency": currency,
+            "reference": reference,
+            "description": description,
+            "return_url": return_url,
+        }
+        data = await self._post("/v1/payments", body, idempotency_key)
         return ProviderPayment(id=data["id"], checkout_url=data["checkout_url"])
 
     async def create_refund(

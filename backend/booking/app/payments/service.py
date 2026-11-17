@@ -10,6 +10,7 @@ from app.auth import Principal
 from app.bookings.models import Booking, BookingStatus
 from app.bookings.service import confirm_paid_booking
 from app.errors import ConflictError, NotFoundError, ServiceUnavailableError
+from app.listings.models import Listing
 from app.payments.models import Payment, PaymentStatus, ProcessedWebhook
 from app.payments.provider import PaymentProvider, PaymentProviderError
 from app.payments.refunds import refund_booking
@@ -23,8 +24,14 @@ class BookingNotPayableError(ConflictError):
 
 
 async def start_payment(
-    session: AsyncSession, provider: PaymentProvider, guest: Principal, booking_id: UUID
+    session: AsyncSession,
+    provider: PaymentProvider,
+    guest: Principal,
+    booking_id: UUID,
+    return_url: str | None = None,
 ) -> Payment:
+    """Creates a payment at the provider; the guest pays on its checkout page and is sent
+    back to `return_url` afterwards."""
     booking = await session.scalar(
         select(Booking)
         .where(Booking.id == booking_id, Booking.guest_id == guest.user_id)
@@ -55,12 +62,22 @@ async def start_payment(
             currency=payment.currency,
             reference=str(payment.id),
             idempotency_key=str(payment.id),
+            description=await _description(session, booking),
+            return_url=return_url,
         )
     except PaymentProviderError as exc:
         raise ServiceUnavailableError("The payment provider is unavailable. Try again.") from exc
     payment.provider_payment_id = created.id
     payment.checkout_url = created.checkout_url
     return payment
+
+
+async def _description(session: AsyncSession, booking: Booking) -> str:
+    """What the guest sees on the checkout page, e.g. "Sunny loft, 3 nights from 7 Jun"."""
+    title = await session.scalar(select(Listing.title).where(Listing.id == booking.listing_id))
+    nights = (booking.check_out - booking.check_in).days
+    when = booking.check_in.strftime("%d %b").lstrip("0")
+    return f"{title}, {nights} night{'s' if nights != 1 else ''} from {when}"[:200]
 
 
 async def handle_webhook(

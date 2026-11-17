@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     jwks_cache_seconds: int = 3600
 
     payment_provider_url: str = "http://payment-mock:8000"
+    site_url: str = Field("http://localhost", description="The website, for links back to it.")
     payment_provider_api_key: str
     payment_webhook_secret: str
     hold_minutes: int = Field(15, description="How long unpaid bookings keep their dates.")

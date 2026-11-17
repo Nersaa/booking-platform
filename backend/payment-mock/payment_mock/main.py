@@ -2,18 +2,19 @@
 
 It implements only what Booking uses:
 - POST /v1/payments                create a payment, get a hosted checkout URL
-- GET  /checkout/{id}              the hosted page where the guest pays or declines
+- GET  /checkout/{id}              the hosted page where the guest pays with a test card
 - POST /v1/payments/{id}/refunds   refund (part of) a succeeded payment
 and reports outcomes with HMAC-signed webhooks, retried with backoff like real providers.
+After a successful payment the guest is sent back to the shop's `return_url`.
 State lives in memory and is lost on restart.
 """
 
 import asyncio
 import hashlib
 import hmac
-import html
 import json
 import logging
+import re
 import secrets
 import time
 from collections.abc import Callable, Coroutine
@@ -22,10 +23,12 @@ from functools import cache
 from typing import Annotated, Any, Literal
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse
+from pydantic import BaseModel, Field, HttpUrl
 from pydantic_settings import BaseSettings
+
+from payment_mock import checkout
 
 logger = logging.getLogger("payment_mock")
 
@@ -50,6 +53,8 @@ class Payment:
     amount: int
     currency: str
     reference: str
+    description: str = ""
+    return_url: str | None = None
     status: Literal["requires_action", "succeeded", "failed"] = "requires_action"
     refunded: int = 0
 
@@ -67,6 +72,8 @@ class PaymentIn(BaseModel):
     amount: int = Field(gt=0)
     currency: str = Field(pattern=r"^[A-Z]{3}$")
     reference: str = Field(max_length=100)
+    description: str = Field("", max_length=200, description="Shown on the checkout page.")
+    return_url: HttpUrl | None = Field(None, description="Where the guest goes after paying.")
 
 
 class RefundIn(BaseModel):
@@ -157,6 +164,8 @@ def create_app(provider: Provider | None = None) -> FastAPI:
             amount=body.amount,
             currency=body.currency,
             reference=body.reference,
+            description=body.description,
+            return_url=str(body.return_url) if body.return_url else None,
         )
         provider.payments[payment.id] = payment
         response = {
@@ -195,27 +204,24 @@ def create_app(provider: Provider | None = None) -> FastAPI:
 
     @app.get("/checkout/{payment_id}", response_class=HTMLResponse)
     async def checkout_page(payment_id: str, provider: ProviderDep) -> str:
-        payment = _payment(provider, payment_id)
-        amount = f"{payment.amount / 100:.2f} {payment.currency}"
-        if payment.status != "requires_action":
-            return _page(f"Payment {html.escape(payment.status)}", f"<p>{amount}</p>")
-        return _page(
-            "Pay for your stay",
-            f"""<p>Amount: <b>{amount}</b></p>
-            <form method="post" action="/checkout/{payment.id}/pay"><button>Pay</button></form>
-            <form method="post" action="/checkout/{payment.id}/decline">
-              <button>Decline card</button></form>""",
-        )
+        return checkout.render(_payment(provider, payment_id))
 
-    @app.post("/checkout/{payment_id}/{outcome}", response_class=HTMLResponse)
-    async def complete_checkout(
-        payment_id: str, outcome: Literal["pay", "decline"], provider: ProviderDep
-    ) -> str:
+    @app.post("/checkout/{payment_id}", response_model=None)
+    async def pay(
+        payment_id: str, provider: ProviderDep, card_number: Annotated[str, Form()] = ""
+    ) -> HTMLResponse | RedirectResponse:
         payment = _payment(provider, payment_id)
         if payment.status == "requires_action":
-            payment.status = "succeeded" if outcome == "pay" else "failed"
+            # The card number only picks the outcome; it is never stored or logged.
+            outcome = checkout.TEST_CARDS.get(re.sub(r"\D", "", card_number))
+            if outcome is None:
+                error = "Use one of the test cards below. This page never charges real cards."
+                return HTMLResponse(checkout.render(payment, error), status.HTTP_400_BAD_REQUEST)
+            payment.status = "succeeded" if outcome == "succeeded" else "failed"
             provider.notify(f"payment.{payment.status}", payment)
-        return _page(f"Payment {payment.status}", "<p>You can close this page.</p>")
+        if payment.status == "succeeded" and payment.return_url:
+            return RedirectResponse(payment.return_url, status.HTTP_303_SEE_OTHER)
+        return HTMLResponse(checkout.render(payment))
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:
@@ -229,11 +235,3 @@ def _payment(provider: Provider, payment_id: str) -> Payment:
     if payment is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Payment not found.")
     return payment
-
-
-def _page(title: str, body: str) -> str:
-    return (
-        f"<!doctype html><html><head><meta charset='utf-8'><title>{title}</title></head>"
-        f"<body style='font-family:sans-serif;max-width:28rem;margin:3rem auto'>"
-        f"<h1>{title}</h1>{body}</body></html>"
-    )

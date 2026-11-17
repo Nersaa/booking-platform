@@ -141,8 +141,10 @@ main part of this project.
   search can be shared.
 - **Listing**: photos, amenities, reviews, free nights for six weeks and the price for
   the chosen dates.
-- **Booking**: log in or register, book, pay on the provider's page; the status turns to
-  "Confirmed" when the payment webhook arrives. Cancel to see the refund.
+- **Booking**: log in or register and book. The booking's page shows the price, the
+  dates and how long they are held; "Pay" opens the provider's checkout, where the test
+  card `4242 4242 4242 4242` pays and `4000 0000 0000 0002` is declined. After paying,
+  the guest comes back to the booking and sees it confirmed. Cancel to see the refund.
 
 - **Help**: write to support about a booking, a payment or the account, and follow the
   conversation. Staff answer in Django Admin (Support requests); the user also gets the

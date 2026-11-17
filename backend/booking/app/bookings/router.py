@@ -49,13 +49,15 @@ async def get_my_booking(session: SessionDep, guest: UserDep, booking_id: UUID) 
     "/{booking_id}/payments", status_code=status.HTTP_201_CREATED, dependencies=WRITE_LIMIT
 )
 async def pay_for_booking(
-    session: SessionDep, guest: UserDep, provider: ProviderDep, booking_id: UUID
+    request: Request, session: SessionDep, guest: UserDep, provider: ProviderDep, booking_id: UUID
 ) -> PaymentOut:
     """Start a payment and get the provider's checkout page for the guest.
 
+    After paying, the provider sends the guest back to the booking's page on the website.
     Asking again while the payment is open returns the same checkout page.
     """
-    payment = await payments.start_payment(session, provider, guest, booking_id)
+    return_url = f"{request.app.state.settings.site_url}/bookings/{booking_id}"
+    payment = await payments.start_payment(session, provider, guest, booking_id, return_url)
     return PaymentOut.from_model(payment)
 
 

@@ -39,7 +39,7 @@ export default function BookingBox({ listingId, maxGuests }: { listingId: string
   const book = useMutation({
     mutationFn: () =>
       api<Booking>('/api/v1/bookings', { method: 'POST', body: { listing_id: listingId, ...stay } }),
-    onSuccess: () => navigate('/bookings'),
+    onSuccess: (booking) => navigate(`/bookings/${booking.id}`),
   })
 
   if (calendar.error) {

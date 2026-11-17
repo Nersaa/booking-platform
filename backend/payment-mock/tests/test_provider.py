@@ -34,15 +34,29 @@ async def client(provider: Provider):
         yield client
 
 
+PAYS = "4242 4242 4242 4242"
+DECLINED = "4000 0000 0000 0002"
+
+
 async def create_payment(client: httpx.AsyncClient, key: str = "k1") -> dict[str, Any]:
     response = await client.post(
         "/v1/payments",
-        json={"amount": 12_000, "currency": "EUR", "reference": "booking-payment-1"},
+        json={
+            "amount": 12_000,
+            "currency": "EUR",
+            "reference": "booking-payment-1",
+            "description": "Stay at Loft & Garden",
+            "return_url": "http://shop.test/bookings/1",
+        },
         headers={**AUTH, "Idempotency-Key": key},
     )
     assert response.status_code == 201, response.text
     data: dict[str, Any] = response.json()
     return data
+
+
+async def pay(client: httpx.AsyncClient, payment: dict[str, Any], card: str) -> httpx.Response:
+    return await client.post(f"/checkout/{payment['id']}", data={"card_number": card})
 
 
 async def test_api_requires_the_merchant_key(client: httpx.AsyncClient) -> None:
@@ -70,11 +84,13 @@ async def test_paying_sends_a_webhook(
     payment = await create_payment(client)
 
     page = await client.get(f"/checkout/{payment['id']}")
-    paid = await client.post(f"/checkout/{payment['id']}/pay")
+    paid = await pay(client, payment, PAYS)
     await asyncio.sleep(0)
 
     assert "120.00 EUR" in page.text
-    assert "succeeded" in paid.text
+    assert "Stay at Loft &amp; Garden" in page.text  # escaped
+    assert paid.status_code == 303
+    assert paid.headers["location"] == "http://shop.test/bookings/1"
     [event] = sent
     assert event["type"] == "payment.succeeded"
     assert event["data"]["reference"] == "booking-payment-1"
@@ -85,11 +101,24 @@ async def test_declined_card_fails_the_payment_once(
 ) -> None:
     payment = await create_payment(client)
 
-    await client.post(f"/checkout/{payment['id']}/decline")
-    await client.post(f"/checkout/{payment['id']}/pay")  # too late, already failed
+    declined = await pay(client, payment, DECLINED)
+    await pay(client, payment, PAYS)  # too late, already failed
     await asyncio.sleep(0)
 
+    assert "declined" in declined.text
     assert [e["type"] for e in sent] == ["payment.failed"]
+
+
+async def test_only_test_cards_are_accepted(
+    client: httpx.AsyncClient, sent: list[dict[str, Any]]
+) -> None:
+    payment = await create_payment(client)
+
+    response = await pay(client, payment, "5555 4444 3333 1111")
+
+    assert response.status_code == 400
+    assert "test cards" in response.text
+    assert sent == []
 
 
 async def test_refunds_are_limited_to_the_paid_amount(
@@ -101,7 +130,7 @@ async def test_refunds_are_limited_to_the_paid_amount(
     early = await client.post(
         url, json={"amount": 100, "reference": "r0"}, headers={**AUTH, "Idempotency-Key": "r0"}
     )
-    await client.post(f"/checkout/{payment['id']}/pay")
+    await pay(client, payment, PAYS)
     half = await client.post(
         url, json={"amount": 6_000, "reference": "r1"}, headers={**AUTH, "Idempotency-Key": "r1"}
     )

@@ -58,6 +58,24 @@ async def test_successful_payment_confirms_the_booking(
     assert event["booking"]["guest_id"] == booking["guest_id"]
 
 
+async def test_checkout_describes_the_stay_and_returns_to_the_booking(
+    client: AsyncClient,
+    auth: Headers,
+    booking: dict[str, Any],
+    payment_provider: FakePaymentProvider,
+) -> None:
+    await pay(client, auth, booking)
+
+    [sent] = payment_provider.payments.values()
+    assert sent["description"] == f"Sunny apartment, 3 nights from {short_date(booking)}"
+    assert sent["return_url"] == f"http://localhost/bookings/{booking['id']}"
+
+
+def short_date(booking: dict[str, Any]) -> str:
+    check_in = date.fromisoformat(booking["check_in"])
+    return f"{check_in.day} {check_in.strftime('%b')}"
+
+
 async def test_asking_to_pay_twice_reuses_the_open_checkout(
     client: AsyncClient,
     auth: Headers,

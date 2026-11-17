@@ -61,9 +61,15 @@ Code: `backend/booking/app/bookings/`.
 ## Payments
 
 The payment provider is a small Stripe-like mock (`backend/payment-mock`). Booking
-creates a payment and sends the guest to the provider's checkout page. The result comes
-back as a webhook signed with HMAC-SHA256, which Booking verifies (and rejects old
-timestamps to stop replays). Each webhook is processed once (`processed_webhooks`).
+creates a payment with a description and a `return_url`, and the guest pays on the
+provider's checkout page with a test card. Only test card numbers are accepted, so a
+real card is never typed into the demo. The provider then sends the guest back to the
+booking's page on the website.
+
+The result itself comes back separately, as a webhook signed with HMAC-SHA256, which
+Booking verifies (and rejects old timestamps to stop replays). Each webhook is processed
+once (`processed_webhooks`). The redirect only brings the guest back: the booking page
+keeps checking the status until the webhook has confirmed the booking.
 
 Refunds follow the cancellation policy (host cancels: full refund; guest: full 7+ days
 before check-in, half up to the day before, none on the day) and are sent to the

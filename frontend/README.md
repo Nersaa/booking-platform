@@ -13,7 +13,7 @@ npm run build
 | Folder | What is inside |
 |---|---|
 | `src/api` | `client.ts`: fetch wrapper with JWT and token refresh; `types.ts`: response types |
-| `src/pages` | Search, Listing, Login, My bookings |
+| `src/pages` | Search, Listing, Login, My bookings, one booking with payment, Help |
 | `src/components` | Map with price tags, listing card, booking box, header |
 | `src/auth.tsx` | Who is logged in (React context) |
 

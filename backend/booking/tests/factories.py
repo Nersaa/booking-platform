@@ -28,13 +28,26 @@ class FakePaymentProvider:
         self.down = False
 
     async def create_payment(
-        self, *, amount: int, currency: str, reference: str, idempotency_key: str
+        self,
+        *,
+        amount: int,
+        currency: str,
+        reference: str,
+        idempotency_key: str,
+        description: str = "",
+        return_url: str | None = None,
     ) -> ProviderPayment:
         if self.down:
             raise PaymentProviderError("provider is down")
         payment = self.payments.setdefault(
             idempotency_key,
-            {"id": f"pay_{len(self.payments)}", "amount": amount, "reference": reference},
+            {
+                "id": f"pay_{len(self.payments)}",
+                "amount": amount,
+                "reference": reference,
+                "description": description,
+                "return_url": return_url,
+            },
         )
         return ProviderPayment(id=payment["id"], checkout_url=f"http://pay/{payment['id']}")
 

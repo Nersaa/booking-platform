@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 
 import Header from './components/Header'
+import BookingPage from './pages/BookingPage'
 import BookingsPage from './pages/BookingsPage'
 import ListingPage from './pages/ListingPage'
 import LoginPage from './pages/LoginPage'
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/listings/:id" element={<ListingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/bookings" element={<BookingsPage />} />
+        <Route path="/bookings/:id" element={<BookingPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/support/:id" element={<TicketPage />} />
         <Route path="*" element={<p className="page notice">This page does not exist.</p>} />

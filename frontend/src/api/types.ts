@@ -79,8 +79,12 @@ export type Booking = {
   check_out: string
   guests: number
   currency: string
+  subtotal: number
+  discount: number
+  cleaning_fee: number
   total: number
   refund_amount: number
+  cancelled_by: 'guest' | 'host' | null
   hold_expires_at: string | null
   created_at: string
 }
