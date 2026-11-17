@@ -206,7 +206,7 @@ button:disabled {
 
 .filters {
   display: grid;
-  grid-template-columns: 1.4fr repeat(4, 1fr);
+  grid-template-columns: 1.3fr 1.5fr 1fr 1fr;
   gap: 0.75rem;
   padding: 1rem;
   border: 1px solid var(--line);
@@ -742,7 +742,7 @@ textarea {
   background: var(--mist);
 }
 
-.message.from-support {
+.message.from-other {
   justify-self: start;
   border-radius: 14px 14px 14px 4px;
   background: var(--tide-tint);
@@ -758,11 +758,262 @@ textarea {
   white-space: pre-line;
 }
 
-/* Small screens: the map on top, everything in one column */
+/* Saved: the heart */
+
+.card-media {
+  position: relative;
+}
+
+.save-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+}
+
+.save-button svg {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.8;
+}
+
+.save-button.is-saved svg {
+  fill: var(--danger);
+  stroke: var(--danger);
+}
+
+.save-button.on-cover {
+  position: absolute;
+  top: 0.625rem;
+  right: 0.625rem;
+  border: 0;
+  box-shadow: 0 1px 4px rgb(28 43 51 / 20%);
+}
+
+.listing-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* Search: more filters and the dates popover */
+
+.results-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.more-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 2fr;
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+fieldset {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+legend {
+  margin-bottom: 0.5rem;
+  padding: 0;
+  font-weight: 700;
+}
+
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 400;
+}
+
+label.check input {
+  min-height: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  accent-color: var(--tide);
+}
+
+.price-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.price-range input {
+  width: 100%;
+  min-width: 0;
+}
+
+.amenity-list {
+  grid-template-columns: 1fr 1fr;
+}
+
+.amenity-list legend {
+  grid-column: 1 / -1;
+}
+
+.clear-filters {
+  margin-top: 0.5rem;
+}
+
+.dates-field {
+  position: relative;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.field-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dates-button {
+  justify-content: start;
+  border-color: var(--line);
+  font-weight: 400;
+  text-align: left;
+}
+
+.dates-popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 600;
+  width: max-content; /* months side by side, not squeezed to the field's width */
+  display: grid;
+  justify-items: start;
+  padding: 0.75rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 8px 24px rgb(28 43 51 / 18%);
+}
+
+/* The date calendar (react-day-picker), in the site's colours */
+
+.rdp-root.date-picker {
+  --rdp-accent-color: var(--tide);
+  --rdp-accent-background-color: var(--tide-tint);
+  --rdp-range_middle-background-color: var(--tide-tint);
+  --rdp-range_start-date-background-color: var(--tide);
+  --rdp-range_end-date-background-color: var(--tide);
+  --rdp-today-color: var(--tide-dark);
+  --rdp-range_start-color: var(--paper);
+  --rdp-range_end-color: var(--paper);
+  font-family: var(--body);
+}
+
+.date-picker .rdp-disabled {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+
+.rdp-root.date-picker.with-prices {
+  --rdp-day-height: 3.25rem;
+  --rdp-day-width: 3.25rem;
+  --rdp-day_button-height: 3rem;
+  --rdp-day_button-width: 3rem;
+}
+
+.date-picker.with-prices .rdp-day_button {
+  display: grid;
+  align-content: center;
+  line-height: 1.1;
+}
+
+.day-price {
+  color: var(--muted);
+  font-size: 0.625rem;
+}
+
+.rdp-selected .day-price,
+.rdp-range_start .day-price,
+.rdp-range_end .day-price {
+  color: inherit;
+}
+
+.chosen-date {
+  display: grid;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.chosen-date span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Booking page: chat and review */
+
+.chat {
+  margin-top: 2rem;
+}
+
+.review-form {
+  margin: 0 0 1.5rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.review-form h2 {
+  margin: 0;
+}
+
+.stars {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.star-button {
+  min-height: 0;
+  padding: 0 0.125rem;
+  border: 0;
+  background: none;
+  color: var(--line);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.star-button.is-on {
+  color: #c98a06;
+}
+
+.nav-profile {
+  font-weight: 700;
+}
+
+/* Small screens: everything in one column */
 
 @media (max-width: 54rem) {
-  .filters {
+  .filters,
+  .more-filters {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .amenity-list {
+    grid-column: 1 / -1;
+  }
+
+  .dates-popover {
+    left: -1rem;
   }
 
   .form-row {

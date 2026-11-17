@@ -1,7 +1,7 @@
 """Imports every model so that `Base.metadata` is complete (used by Alembic)."""
 
 from app.availability.models import AvailabilityBlock, ListingPricing, SeasonalRate
-from app.bookings.models import Booking
+from app.bookings.models import Booking, BookingMessage
 from app.db import Base
 from app.listings.models import Listing
 from app.outbox import OutboxEvent
@@ -11,6 +11,7 @@ __all__ = [
     "AvailabilityBlock",
     "Base",
     "Booking",
+    "BookingMessage",
     "Listing",
     "ListingPricing",
     "OutboxEvent",

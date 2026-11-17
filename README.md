@@ -19,10 +19,12 @@ results: [docs/load-testing.md](docs/load-testing.md).
 - Emails on booking events, reviews after the stay, ratings in search.
 - Help desk: users write to support from the website, staff answer in Django Admin and
   the answer also arrives by email.
+- Messages between guest and host about a booking; saved listings; a profile with
+  password change and "become a host".
 - Redis cache and rate limits, Prometheus metrics and a Grafana dashboard, Locust load
   test, CI that tests the services and publishes Docker images.
-- A small website (React + TypeScript): search with a map view, listing page, booking,
-  payment and "My bookings".
+- A small website (React + TypeScript): search with filters and a map view, a date
+  calendar with prices, booking and payment, messages, saved places, reviews, profile.
 
 ## Project structure
 
@@ -136,15 +138,21 @@ To fill the site with demo listings (300 places in 8 cities): `python loadtest/s
 A deliberately small showcase of the API in [`frontend/`](frontend); the backend is the
 main part of this project.
 
-- **Search**: filters and a grid of places; "Show map" switches to a map with price tags,
-  where "Search this area" searches what the map shows. Filters live in the URL, so a
-  search can be shared.
-- **Listing**: photos, amenities, reviews, free nights for six weeks and the price for
-  the chosen dates.
+- **Search**: place, dates (a calendar), guests and "Filters": price per night, type of
+  place, bedrooms, rating, amenities. Results come as a grid of places; "Show map"
+  switches to a map with price tags, where "Search this area" searches what the map
+  shows. Filters live in the URL, so a search can be shared.
+- **Listing**: photos, amenities, reviews and a calendar for the next six months: taken
+  nights are greyed out and every free night shows its price. The heart saves the place
+  to "Saved".
 - **Booking**: log in or register and book. The booking's page shows the price, the
   dates and how long they are held; "Pay" opens the provider's checkout, where the test
   card `4242 4242 4242 4242` pays and `4000 0000 0000 0002` is declined. After paying,
   the guest comes back to the booking and sees it confirmed. Cancel to see the refund.
+  The same page has messages with the host, and after the stay a form to rate it.
+- **Hosting** (for hosts): bookings of their places, each with the conversation with the
+  guest and a cancel button.
+- **Profile**: name, password, "Become a host".
 
 - **Help**: write to support about a booking, a payment or the account, and follow the
   conversation. Staff answer in Django Admin (Support requests); the user also gets the
@@ -167,6 +175,9 @@ owning service by Nginx.
 | POST | `/api/v1/auth/logout` | anyone | Revoke a refresh token |
 | GET, PATCH | `/api/v1/users/me` | user | Profile |
 | POST | `/api/v1/users/me/host` | user | Become a host (returns tokens with the new role) |
+| POST | `/api/v1/users/me/password` | user | Change the password (needs the current one) |
+| GET | `/api/v1/favorites` | user | Saved listings |
+| PUT, DELETE | `/api/v1/favorites/{listing_id}` | user | Save or unsave a listing |
 | GET | `/api/v1/amenities` | anyone | Amenity dictionary |
 | GET | `/api/v1/listings/{id}` | anyone | Published listing with its rating (cached) |
 | GET | `/api/v1/listings/{id}/reviews` | anyone | Reviews, newest first (`page`, `page_size`) |
@@ -221,8 +232,10 @@ A listing is bookable once it is published and priced.
 | GET | `/api/v1/bookings`, `/api/v1/bookings/{id}` | guest | Own bookings, newest first |
 | POST | `/api/v1/bookings/{id}/payments` | guest | Start a payment, get the checkout URL |
 | POST | `/api/v1/bookings/{id}/cancel` | guest | Cancel; refund by policy |
+| GET, POST | `/api/v1/bookings/{id}/messages` | guest | Messages with the host |
 | GET | `/api/v1/host/bookings`, `/api/v1/host/bookings/{id}` | host | Stays at own listings, by check-in date |
 | POST | `/api/v1/host/bookings/{id}/cancel` | host | Cancel; the guest gets a full refund |
+| GET, POST | `/api/v1/host/bookings/{id}/messages` | host | Messages with the guest |
 
 ```mermaid
 stateDiagram-v2

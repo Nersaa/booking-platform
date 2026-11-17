@@ -110,6 +110,14 @@ a message, the request becomes "Answered" and the user gets an email (Celery).
 The status always shows whose turn it is: `open` waits for support, `answered` for the
 user, `closed` takes no more messages. Code: `backend/catalog/apps/support/`.
 
+## Messages between guest and host
+
+Messages belong to a booking, so they live in Booking next to it (`booking_messages`).
+Only the booking's guest and host can read or write them, the same check as for the
+booking itself. Booking knows people only by id, so a message stores its author's id and
+the API says whether it came from the host. The website reads new messages every
+10 seconds.
+
 ## Website
 
 `frontend/` is a small React + TypeScript app (Vite). It is built into static files and

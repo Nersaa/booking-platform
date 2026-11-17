@@ -3,11 +3,15 @@ import { Link } from 'react-router-dom'
 import type { SearchItem } from '../api/types'
 import { money, plural } from '../format'
 import Cover from './Cover'
+import SaveButton from './SaveButton'
 
 export default function ListingCard({ item, to }: { item: SearchItem; to: string }) {
   return (
     <Link to={to} className="card">
-      <Cover url={item.cover_photo_url} propertyType={item.property_type} className="card-cover" />
+      <div className="card-media">
+        <Cover url={item.cover_photo_url} propertyType={item.property_type} className="card-cover" />
+        <SaveButton listingId={item.id} className="on-cover" />
+      </div>
       <div className="card-head">
         <h2 className="card-title">{item.title}</h2>
         {item.rating && (

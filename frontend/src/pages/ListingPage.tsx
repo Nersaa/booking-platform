@@ -1,14 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 
 import { api } from '../api/client'
-import type { Listing, ReviewPage } from '../api/types'
+import type { Calendar, Listing, ReviewPage } from '../api/types'
 import BookingBox from '../components/BookingBox'
 import Cover from '../components/Cover'
+import DateRangePicker, { toIso } from '../components/DateRangePicker'
+import SaveButton from '../components/SaveButton'
 import { plural, shortDate } from '../format'
+
+const CALENDAR_DAYS = 180 // how far ahead the calendar shows free nights and prices
 
 export default function ListingPage() {
   const { id = '' } = useParams()
+  const [params, setParams] = useSearchParams()
 
   // The page itself comes from the Catalog service, prices and dates from Booking.
   const listing = useQuery({
@@ -19,6 +24,25 @@ export default function ListingPage() {
     queryKey: ['reviews', id],
     queryFn: () => api<ReviewPage>(`/api/v1/listings/${id}/reviews`),
   })
+  const calendar = useQuery({
+    queryKey: ['calendar', id],
+    queryFn: () => {
+      const today = new Date()
+      const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + CALENDAR_DAYS)
+      return api<Calendar>(`/api/v1/listings/${id}/calendar`, {
+        params: { start_date: toIso(today), end_date: toIso(end) },
+      })
+    },
+  })
+
+  function chooseDates(checkIn: string, checkOut: string) {
+    const next = new URLSearchParams(params)
+    for (const [key, value] of [['check_in', checkIn], ['check_out', checkOut]]) {
+      if (value) next.set(key, value)
+      else next.delete(key)
+    }
+    setParams(next, { replace: true })
+  }
 
   if (listing.isPending) return <p className="page notice">Loading…</p>
   if (listing.error) return <p className="page notice notice-error">{listing.error.message}</p>
@@ -29,7 +53,10 @@ export default function ListingPage() {
     <main className="page listing">
       <div className="listing-main">
         <Cover url={photo} propertyType={place.property_type} className="listing-cover" />
-        <h1>{place.title}</h1>
+        <div className="listing-title">
+          <h1>{place.title}</h1>
+          <SaveButton listingId={place.id} />
+        </div>
         <p className="muted">
           {place.city}, {place.country}. Hosted by {place.host.first_name}.{' '}
           {place.bedrooms === 0 ? 'Studio' : plural(place.bedrooms, 'bedroom')},{' '}
@@ -46,6 +73,21 @@ export default function ListingPage() {
                 <li key={amenity.code}>{amenity.name}</li>
               ))}
             </ul>
+          </>
+        )}
+
+        {calendar.data && (
+          <>
+            <h2>Choose your dates</h2>
+            <p className="muted small">
+              Grey days are taken. Prices are per night; weekends and seasons may cost more.
+            </p>
+            <DateRangePicker
+              checkIn={params.get('check_in') ?? ''}
+              checkOut={params.get('check_out') ?? ''}
+              onChange={chooseDates}
+              calendar={calendar.data}
+            />
           </>
         )}
 
@@ -75,7 +117,11 @@ export default function ListingPage() {
         ))}
       </div>
 
-      <BookingBox listingId={place.id} maxGuests={place.max_guests} />
+      {calendar.isPending ? (
+        <aside className="booking-box">Loading prices…</aside>
+      ) : (
+        <BookingBox listingId={place.id} maxGuests={place.max_guests} calendar={calendar.data} />
+      )}
     </main>
   )
 }

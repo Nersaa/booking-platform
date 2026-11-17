@@ -13,6 +13,7 @@ from apps.users.keys import jwks
 from apps.users.models import User
 from apps.users.serializers import (
     BecomeHostResponseSerializer,
+    ChangePasswordSerializer,
     RegisterSerializer,
     UserSerializer,
 )
@@ -44,6 +45,22 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self) -> User:
         return authenticated_user(self.request)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = (IsAuthenticated,)
+    throttle_classes = (ScopedRateThrottle,)
+    throttle_scope = "auth"  # guessing the current password is as limited as logging in
+
+    @extend_schema(request=ChangePasswordSerializer, responses={204: None}, tags=["users"])
+    def post(self, request: Request) -> Response:
+        user = authenticated_user(request)
+        serializer = ChangePasswordSerializer(data=request.data, context={"user": user})
+        serializer.is_valid(raise_exception=True)
+        services.user_change_password(
+            user=user, new_password=serializer.validated_data["new_password"]
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class BecomeHostView(APIView):

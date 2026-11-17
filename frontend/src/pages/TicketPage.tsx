@@ -73,7 +73,7 @@ export default function TicketPage() {
 
       <ol className="messages">
         {messages.map((message) => (
-          <li key={message.id} className={message.from_support ? 'message from-support' : 'message'}>
+          <li key={message.id} className={message.from_support ? 'message from-other' : 'message'}>
             <p className="message-meta">
               <strong>{message.from_support ? `Support, ${message.author_name}` : 'You'}</strong>{' '}
               <span className="muted">

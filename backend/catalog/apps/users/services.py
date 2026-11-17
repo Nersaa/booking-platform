@@ -15,3 +15,9 @@ def user_become_host(*, user: User) -> User:
         user.is_host = True
         user.save(update_fields=["is_host"])
     return user
+
+
+def user_change_password(*, user: User, new_password: str) -> User:
+    user.set_password(new_password)
+    user.save(update_fields=["password"])
+    return user

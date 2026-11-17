@@ -3,7 +3,7 @@ import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../auth'
 
 export default function Header() {
-  const { user, isLoggedIn, logout } = useAuth()
+  const { user, isLoggedIn } = useAuth()
 
   return (
     <header className="header">
@@ -11,13 +11,19 @@ export default function Header() {
         Booking Platform
       </Link>
       <nav className="nav">
-        <NavLink to="/">Search</NavLink>
-        {isLoggedIn && <NavLink to="/bookings">My bookings</NavLink>}
-        {isLoggedIn && <NavLink to="/support">Help</NavLink>}
+        <NavLink to="/" end>
+          Search
+        </NavLink>
         {isLoggedIn ? (
-          <button className="link-button" onClick={logout}>
-            Log out{user ? ` (${user.first_name})` : ''}
-          </button>
+          <>
+            <NavLink to="/saved">Saved</NavLink>
+            <NavLink to="/bookings">My bookings</NavLink>
+            {user?.is_host && <NavLink to="/hosting">Hosting</NavLink>}
+            <NavLink to="/support">Help</NavLink>
+            <NavLink to="/profile" className="nav-profile">
+              {user?.first_name ?? 'Profile'}
+            </NavLink>
+          </>
         ) : (
           <NavLink to="/login">Log in</NavLink>
         )}

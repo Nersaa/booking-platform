@@ -25,7 +25,7 @@ from app.availability.service import (
     price_available_stay,
     today,
 )
-from app.bookings.models import Booking, BookingStatus
+from app.bookings.models import Booking, BookingMessage, BookingStatus
 from app.bookings.policy import refund_amount
 from app.bookings.schemas import BookingIn
 from app.errors import ConflictError, DomainError, NotFoundError
@@ -109,6 +109,30 @@ async def get_booking(
     if booking is None:
         raise NotFoundError("Booking not found.")
     return booking
+
+
+async def list_messages(
+    session: AsyncSession, principal: Principal, booking_id: UUID, *, as_host: bool
+) -> tuple[Booking, list[BookingMessage]]:
+    """The conversation about a booking, oldest first. Only its guest and host see it."""
+    booking = await get_booking(session, principal, booking_id, as_host=as_host)
+    messages = await session.scalars(
+        select(BookingMessage)
+        .where(BookingMessage.booking_id == booking.id)
+        .order_by(BookingMessage.created_at)
+    )
+    return booking, list(messages)
+
+
+async def send_message(
+    session: AsyncSession, principal: Principal, booking_id: UUID, text: str, *, as_host: bool
+) -> tuple[Booking, BookingMessage]:
+    booking = await get_booking(session, principal, booking_id, as_host=as_host)
+    message = BookingMessage(booking_id=booking.id, author_id=principal.user_id, text=text)
+    session.add(message)
+    await session.flush()
+    await session.refresh(message)  # created_at comes from the database
+    return booking, message
 
 
 async def list_guest_bookings(

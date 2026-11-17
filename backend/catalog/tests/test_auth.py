@@ -135,3 +135,24 @@ def test_become_host_returns_tokens_with_host_role(client_for):
     assert response.data["user"]["is_host"] is True
     claims = verify_with_jwks(client, response.data["access"])
     assert claims["roles"] == ["guest", "host"]
+
+
+def test_password_change_needs_the_current_password(client_for, api_client):
+    user = UserFactory(email="pw@example.com")
+    client = client_for(user)
+    url = reverse("users-me-password")
+
+    wrong = client.post(url, {"current_password": "nope", "new_password": "N3w-passw0rd!x"})
+    weak = client.post(url, {"current_password": DEFAULT_PASSWORD, "new_password": "123"})
+    changed = client.post(
+        url, {"current_password": DEFAULT_PASSWORD, "new_password": "N3w-passw0rd!x"}
+    )
+    login = api_client.post(
+        reverse("auth-token"), {"email": "pw@example.com", "password": "N3w-passw0rd!x"}
+    )
+
+    assert wrong.status_code == 400
+    assert "current_password" in wrong.data["errors"]
+    assert weak.status_code == 400
+    assert changed.status_code == 204
+    assert login.status_code == 200

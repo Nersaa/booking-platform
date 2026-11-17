@@ -10,4 +10,5 @@ urlpatterns = [
     path("auth/logout", TokenBlacklistView.as_view(), name="auth-logout"),
     path("users/me", views.MeView.as_view(), name="users-me"),
     path("users/me/host", views.BecomeHostView.as_view(), name="users-me-host"),
+    path("users/me/password", views.ChangePasswordView.as_view(), name="users-me-password"),
 ]

@@ -31,7 +31,7 @@ export function setTokens(tokens: Tokens | null) {
   window.dispatchEvent(new Event('tokens-changed'))
 }
 
-type Params = Record<string, string | number | undefined | null>
+type Params = Record<string, string | number | string[] | undefined | null>
 
 type Options = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
@@ -53,8 +53,11 @@ export async function api<T>(path: string, options: Options = {}): Promise<T> {
 function send(path: string, { method = 'GET', params, body }: Options): Promise<Response> {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params ?? {})) {
-    if (value !== undefined && value !== null && value !== '') {
-      query.set(key, String(value))
+    // Lists are sent as repeated keys: ?amenities=wifi&amenities=pool
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (item !== undefined && item !== null && item !== '') {
+        query.append(key, String(item))
+      }
     }
   }
   const url = query.size ? `${path}?${query}` : path

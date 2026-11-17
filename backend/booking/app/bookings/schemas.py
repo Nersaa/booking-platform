@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.bookings.models import Booking, BookingStatus
+from app.bookings.models import Booking, BookingMessage, BookingStatus
 from app.payments.models import Payment, PaymentStatus
 
 
@@ -80,4 +80,24 @@ class PaymentOut(BaseModel):
             amount=payment.amount,
             currency=payment.currency,
             checkout_url=payment.checkout_url,
+        )
+
+
+class MessageIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class MessageOut(BaseModel):
+    id: UUID
+    text: str
+    from_host: bool = Field(description="False when the guest wrote it.")
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, message: BookingMessage, booking: Booking) -> Self:
+        return cls(
+            id=message.id,
+            text=message.text,
+            from_host=message.author_id == booking.host_id,
+            created_at=message.created_at,
         )

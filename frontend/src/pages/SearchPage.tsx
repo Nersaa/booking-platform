@@ -4,8 +4,11 @@ import { useSearchParams } from 'react-router-dom'
 
 import { api } from '../api/client'
 import type { Page, SearchItem } from '../api/types'
+import DateRangePicker from '../components/DateRangePicker'
 import ListingCard from '../components/ListingCard'
+import MoreFilters, { type FilterValues } from '../components/MoreFilters'
 import ResultsMap from '../components/ResultsMap'
+import { shortDate } from '../format'
 
 // The cities of the demo data (`python loadtest/seed.py`).
 const CITIES: Record<string, [number, number]> = {
@@ -25,6 +28,8 @@ export default function SearchPage() {
   // Filters live in the URL, so a search can be shared and survives the Back button.
   const [params, setParams] = useSearchParams()
   const [selected, setSelected] = useState<SearchItem | null>(null)
+  const [showFilters, setShowFilters] = useState(false)
+  const [showDates, setShowDates] = useState(false)
 
   const city = params.get('city') ?? 'Lisbon'
   const bbox = params.get('bbox')
@@ -36,13 +41,34 @@ export default function SearchPage() {
   const showMap = params.get('view') === 'map'
   const center = bbox ? null : (CITIES[city] ?? CITIES.Lisbon)
   const hasDates = checkIn !== '' && checkOut !== ''
+  const filters: FilterValues = {
+    minPrice: params.get('min_price') ?? '',
+    maxPrice: params.get('max_price') ?? '',
+    types: params.getAll('type'),
+    amenities: params.getAll('amenity'),
+    bedrooms: params.get('bedrooms') ?? '',
+    rating: params.get('rating') ?? '',
+  }
+  const activeFilters =
+    Number(filters.minPrice !== '' || filters.maxPrice !== '') +
+    filters.types.length +
+    filters.amenities.length +
+    Number(filters.bedrooms !== '') +
+    Number(filters.rating !== '')
+  const byPrice = sort === 'price' || filters.minPrice !== '' || filters.maxPrice !== ''
 
   const query = {
     ...(center ? { lat: center[0], lon: center[1], radius_km: 15 } : { bbox }),
     ...(hasDates ? { check_in: checkIn, check_out: checkOut } : {}),
     guests,
     sort,
-    currency: sort === 'price' ? 'EUR' : undefined, // prices are compared within one currency
+    currency: byPrice ? 'EUR' : undefined, // prices are compared within one currency
+    min_price: filters.minPrice ? Number(filters.minPrice) * 100 : undefined, // in cents
+    max_price: filters.maxPrice ? Number(filters.maxPrice) * 100 : undefined,
+    property_type: filters.types,
+    amenities: filters.amenities,
+    min_bedrooms: filters.bedrooms,
+    min_rating: filters.rating,
     limit: showMap ? MAP_SIZE : PAGE_SIZE,
     offset: showMap ? 0 : offset,
   }
@@ -52,15 +78,21 @@ export default function SearchPage() {
     placeholderData: keepPreviousData, // keep the old results on screen while new ones load
   })
 
-  function update(changes: Record<string, string | null>) {
+  function update(changes: Record<string, string | string[] | null>) {
     const next = new URLSearchParams(params)
     if (!('offset' in changes)) next.delete('offset') // a new search starts from page one
     for (const [key, value] of Object.entries(changes)) {
-      if (value) next.set(key, value)
-      else next.delete(key)
+      next.delete(key)
+      for (const item of Array.isArray(value) ? value : [value]) {
+        if (item) next.append(key, item)
+      }
     }
     setParams(next)
     setSelected(null)
+  }
+
+  function clearFilters() {
+    update({ min_price: null, max_price: null, type: null, amenity: null, bedrooms: null, rating: null })
   }
 
   const stay = hasDates ? `?check_in=${checkIn}&check_out=${checkOut}&guests=${guests}` : ''
@@ -82,24 +114,39 @@ export default function SearchPage() {
             ))}
           </select>
         </label>
-        <label>
-          Check-in
-          <input
-            type="date"
-            value={checkIn}
-            min={today()}
-            onChange={(event) => update({ check_in: event.target.value })}
-          />
-        </label>
-        <label>
-          Check-out
-          <input
-            type="date"
-            value={checkOut}
-            min={checkIn || today()}
-            onChange={(event) => update({ check_out: event.target.value })}
-          />
-        </label>
+        <div className="dates-field">
+          <span className="field-label">Dates</span>
+          <button
+            type="button"
+            className="dates-button"
+            aria-expanded={showDates}
+            onClick={() => setShowDates(!showDates)}
+          >
+            {hasDates ? `${shortDate(checkIn)} – ${shortDate(checkOut)}` : 'Any dates'}
+          </button>
+          {showDates && (
+            <div className="dates-popover">
+              <DateRangePicker
+                checkIn={checkIn}
+                checkOut={checkOut}
+                onChange={(newCheckIn, newCheckOut) => {
+                  update({ check_in: newCheckIn, check_out: newCheckOut })
+                  if (newCheckOut) setShowDates(false) // both dates chosen
+                }}
+              />
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  update({ check_in: null, check_out: null })
+                  setShowDates(false)
+                }}
+              >
+                Any dates
+              </button>
+            </div>
+          )}
+        </div>
         <label>
           Guests
           <input
@@ -119,17 +166,33 @@ export default function SearchPage() {
         </label>
       </form>
 
+      {showFilters && (
+        <>
+          <MoreFilters values={filters} onChange={update} />
+          {activeFilters > 0 && (
+            <button className="link-button clear-filters" onClick={clearFilters}>
+              Clear filters
+            </button>
+          )}
+        </>
+      )}
+
       <div className="results-bar">
         {data && (
           <p className="results-count">
             {data.total === 0
-              ? 'No places match. Try other dates or another city.'
+              ? 'No places match. Try other dates, another city or fewer filters.'
               : `${data.total} ${data.total === 1 ? 'place' : 'places'} ${where}${hasDates ? ', free on your dates' : ''}`}
           </p>
         )}
-        <button onClick={() => update({ view: showMap ? null : 'map' })}>
-          {showMap ? 'Show list' : 'Show map'}
-        </button>
+        <div className="results-actions">
+          <button onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters}>
+            Filters{activeFilters > 0 ? ` (${activeFilters})` : ''}
+          </button>
+          <button onClick={() => update({ view: showMap ? null : 'map' })}>
+            {showMap ? 'Show list' : 'Show map'}
+          </button>
+        </div>
       </div>
 
       {error && <p className="notice notice-error">{error.message}</p>}
@@ -191,8 +254,4 @@ export default function SearchPage() {
       )}
     </main>
   )
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10)
 }

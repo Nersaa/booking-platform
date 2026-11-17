@@ -6,8 +6,11 @@ import type { Booking, Calendar, Quote } from '../api/types'
 import { useAuth } from '../auth'
 import { money, plural, shortDate } from '../format'
 
-// Dates, the price for them, and the "Book" button.
-export default function BookingBox({ listingId, maxGuests }: { listingId: string; maxGuests: number }) {
+type Props = { listingId: string; maxGuests: number; calendar: Calendar | undefined }
+
+// The chosen dates, the price for them, and the "Book" button. Dates are picked in the
+// calendar on the listing page; both read them from the URL.
+export default function BookingBox({ listingId, maxGuests, calendar }: Props) {
   const { isLoggedIn } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -24,11 +27,6 @@ export default function BookingBox({ listingId, maxGuests }: { listingId: string
     setParams(next, { replace: true })
   }
 
-  const calendar = useQuery({
-    queryKey: ['calendar', listingId],
-    queryFn: () => api<Calendar>(`/api/v1/listings/${listingId}/calendar`),
-  })
-
   const stay = { check_in: checkIn, check_out: checkOut, guests }
   const quote = useQuery({
     queryKey: ['quote', listingId, stay],
@@ -42,39 +40,29 @@ export default function BookingBox({ listingId, maxGuests }: { listingId: string
     onSuccess: (booking) => navigate(`/bookings/${booking.id}`),
   })
 
-  if (calendar.error) {
+  if (!calendar) {
     return <aside className="booking-box">This place is not open for booking yet.</aside>
   }
 
-  const firstDay = calendar.data?.days[0]
+  const firstDay = calendar.days[0]
   return (
     <aside className="booking-box">
-      {calendar.data && firstDay && (
+      {firstDay && (
         <p className="booking-price">
-          <strong>{money(firstDay.nightly_price, calendar.data.currency)}</strong> per night
-          <span className="muted">, {plural(calendar.data.min_nights, 'night')} minimum</span>
+          <strong>{money(firstDay.nightly_price, calendar.currency)}</strong> per night
+          <span className="muted">, {plural(calendar.min_nights, 'night')} minimum</span>
         </p>
       )}
 
       <div className="booking-dates">
-        <label>
-          Check-in
-          <input
-            type="date"
-            value={checkIn}
-            min={firstDay?.date}
-            onChange={(event) => update('check_in', event.target.value)}
-          />
-        </label>
-        <label>
-          Check-out
-          <input
-            type="date"
-            value={checkOut}
-            min={checkIn || firstDay?.date}
-            onChange={(event) => update('check_out', event.target.value)}
-          />
-        </label>
+        <div className="chosen-date">
+          <span>Check-in</span>
+          <strong>{checkIn ? shortDate(checkIn) : 'Add date'}</strong>
+        </div>
+        <div className="chosen-date">
+          <span>Check-out</span>
+          <strong>{checkOut ? shortDate(checkOut) : 'Add date'}</strong>
+        </div>
         <label>
           Guests
           <input
@@ -87,9 +75,7 @@ export default function BookingBox({ listingId, maxGuests }: { listingId: string
         </label>
       </div>
 
-      {calendar.data && <Availability calendar={calendar.data} />}
-
-      {!hasDates && <p className="muted">Choose dates to see the price.</p>}
+      {!hasDates && <p className="muted">Pick your dates in the calendar to see the price.</p>}
       {quote.error && <p className="notice notice-error">{quote.error.message}</p>}
       {quote.data && (
         <dl className="quote">
@@ -132,22 +118,3 @@ export default function BookingBox({ listingId, maxGuests }: { listingId: string
   )
 }
 
-// The next six weeks at a glance: which nights are still free.
-function Availability({ calendar }: { calendar: Calendar }) {
-  return (
-    <div className="availability">
-      <p className="small">
-        Next six weeks, <span className="day day-free" /> free <span className="day" /> taken
-      </p>
-      <div className="days">
-        {calendar.days.slice(0, 42).map((day) => (
-          <span
-            key={day.date}
-            className={day.available ? 'day day-free' : 'day'}
-            title={`${shortDate(day.date)}: ${day.available ? money(day.nightly_price, calendar.currency) : 'taken'}`}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}

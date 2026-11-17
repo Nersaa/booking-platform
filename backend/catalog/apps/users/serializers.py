@@ -33,6 +33,20 @@ class RegisterSerializer(serializers.Serializer):
         return attrs
 
 
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_current_password(self, value: str) -> str:
+        if not self.context["user"].check_password(value):
+            raise serializers.ValidationError("The current password is wrong.")
+        return value
+
+    def validate_new_password(self, value: str) -> str:
+        validate_password(value, user=self.context["user"])
+        return value
+
+
 class TokenPairSerializer(serializers.Serializer):
     access = serializers.CharField()
     refresh = serializers.CharField()

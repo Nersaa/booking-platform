@@ -5,7 +5,9 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Booking, Listing, Payment } from '../api/types'
 import { useAuth } from '../auth'
+import BookingChat from '../components/BookingChat'
 import Cover from '../components/Cover'
+import ReviewForm from '../components/ReviewForm'
 import { money, plural } from '../format'
 
 // One booking: what was booked, what it costs, and the next step (pay, wait, or nothing).
@@ -65,6 +67,7 @@ export default function BookingPage() {
         onPay={() => pay.mutate()}
       />
       {error && <p className="notice notice-error">{error.message}</p>}
+      {b.status === 'completed' && <ReviewForm bookingId={b.id} listingId={b.listing_id} />}
 
       <div className="booking-layout">
         <section className="trip">
@@ -95,6 +98,7 @@ export default function BookingPage() {
               <dd>{b.guests}</dd>
             </div>
           </dl>
+          <BookingChat bookingId={b.id} asHost={false} />
         </section>
 
         <aside className="booking-box">

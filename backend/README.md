@@ -20,6 +20,7 @@ backend/
 | `apps/listings/` | listings, moderation (Django Admin), photo uploads to S3 and their processing in Celery |
 | `apps/reviews/` | reviews after a stay, host replies, the listing rating |
 | `apps/support/` | help requests from users; staff answer them in Django Admin |
+| `apps/favorites/` | listings users saved for later |
 | `apps/notifications/` | reads booking events from RabbitMQ and sends emails |
 | `apps/outbox/` | saves events with the change and sends them to RabbitMQ (Celery beat task) |
 | `apps/common/` | shared pieces: error format, pagination, health checks, S3 helpers |
@@ -37,7 +38,7 @@ through here), `views.py` + `serializers.py` (HTTP), `tasks.py` (Celery).
 | `app/listings/` | Booking's own copy of the listings, updated from Catalog's events |
 | `app/search/` | `GET /api/v1/listings`: map, dates and filters in one PostGIS query |
 | `app/availability/` | host prices, seasonal rates, closed dates; calendar and price quotes |
-| `app/bookings/` | bookings and their statuses, cancellation policy |
+| `app/bookings/` | bookings and their statuses, cancellation policy, guest-host messages |
 | `app/payments/` | payment provider client, signed webhooks, refunds |
 | `app/auth.py` | checks Catalog's JWTs with its public key |
 | `app/ratelimit.py`, `app/cache.py` | request limits and the search cache in Redis |

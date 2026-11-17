@@ -6,7 +6,7 @@ import type { Booking, BookingStatus, Listing, Page } from '../api/types'
 import { useAuth } from '../auth'
 import { money, plural, shortDate } from '../format'
 
-const STATUS_LABELS: Record<BookingStatus, string> = {
+export const STATUS_LABELS: Record<BookingStatus, string> = {
   pending_payment: 'Waiting for payment',
   confirmed: 'Confirmed',
   cancelled: 'Cancelled',

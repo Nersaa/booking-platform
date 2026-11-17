@@ -7,7 +7,14 @@ from fastapi import APIRouter, Depends, Request, status
 
 from app.auth import HostDep, Principal, current_principal
 from app.bookings import service
-from app.bookings.schemas import BookingIn, BookingOut, CancelIn, PaymentOut
+from app.bookings.schemas import (
+    BookingIn,
+    BookingOut,
+    CancelIn,
+    MessageIn,
+    MessageOut,
+    PaymentOut,
+)
 from app.db import SessionDep
 from app.pagination import Limit, Offset, Page
 from app.payments import service as payments
@@ -72,6 +79,25 @@ async def cancel_my_booking(
     return BookingOut.from_model(booking)
 
 
+@guest_router.get("/{booking_id}/messages")
+async def guest_messages(session: SessionDep, guest: UserDep, booking_id: UUID) -> list[MessageOut]:
+    """The conversation with the host, oldest first."""
+    booking, messages = await service.list_messages(session, guest, booking_id, as_host=False)
+    return [MessageOut.from_model(m, booking) for m in messages]
+
+
+@guest_router.post(
+    "/{booking_id}/messages", status_code=status.HTTP_201_CREATED, dependencies=WRITE_LIMIT
+)
+async def write_to_host(
+    session: SessionDep, guest: UserDep, booking_id: UUID, body: MessageIn
+) -> MessageOut:
+    booking, message = await service.send_message(
+        session, guest, booking_id, body.text, as_host=False
+    )
+    return MessageOut.from_model(message, booking)
+
+
 host_router = APIRouter(prefix="/api/v1/host/bookings", tags=["host: bookings"])
 
 
@@ -104,3 +130,22 @@ async def cancel_as_host(
         session, provider, host, booking_id, body.reason, CancelledBy.HOST
     )
     return BookingOut.from_model(booking)
+
+
+@host_router.get("/{booking_id}/messages")
+async def host_messages(session: SessionDep, host: HostDep, booking_id: UUID) -> list[MessageOut]:
+    """The conversation with the guest, oldest first."""
+    booking, messages = await service.list_messages(session, host, booking_id, as_host=True)
+    return [MessageOut.from_model(m, booking) for m in messages]
+
+
+@host_router.post(
+    "/{booking_id}/messages", status_code=status.HTTP_201_CREATED, dependencies=WRITE_LIMIT
+)
+async def write_to_guest(
+    session: SessionDep, host: HostDep, booking_id: UUID, body: MessageIn
+) -> MessageOut:
+    booking, message = await service.send_message(
+        session, host, booking_id, body.text, as_host=True
+    )
+    return MessageOut.from_model(message, booking)
