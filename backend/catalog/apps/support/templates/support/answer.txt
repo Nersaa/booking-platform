@@ -1,0 +1,8 @@
+{% autoescape off %}Hi {{ ticket.user.first_name }},
+
+support replied to your request "{{ ticket.subject }}":
+
+{{ message.text }}
+
+You can answer or close the request on the Help page of the website.
+{% endautoescape %}

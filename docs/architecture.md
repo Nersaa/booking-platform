@@ -94,6 +94,16 @@ Both APIs expose Prometheus metrics (`prometheus-fastapi-instrumentator`,
 and RabbitMQ; Grafana shows the "Booking Platform" dashboard. Both are configured from
 files in `infra/`.
 
+## Support
+
+Users open a request on the website (topic, subject, message, optionally a booking) and
+can keep writing until it is closed. Staff work in Django Admin, "Support requests":
+filter by status, read the conversation, type a reply and save. The reply is stored as
+a message, the request becomes "Answered" and the user gets an email (Celery).
+
+The status always shows whose turn it is: `open` waits for support, `answered` for the
+user, `closed` takes no more messages. Code: `backend/catalog/apps/support/`.
+
 ## Website
 
 `frontend/` is a small React + TypeScript app (Vite). It is built into static files and

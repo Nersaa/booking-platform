@@ -17,9 +17,11 @@ results: [docs/load-testing.md](docs/load-testing.md).
 - Bookings with a 15-minute hold, payments through a Stripe-like mock with signed
   webhooks, cancellations with refunds by policy.
 - Emails on booking events, reviews after the stay, ratings in search.
+- Help desk: users write to support from the website, staff answer in Django Admin and
+  the answer also arrives by email.
 - Redis cache and rate limits, Prometheus metrics and a Grafana dashboard, Locust load
   test, CI that tests the services and publishes Docker images.
-- A small website (React + TypeScript): search on the map, listing page, booking,
+- A small website (React + TypeScript): search with a map view, listing page, booking,
   payment and "My bookings".
 
 ## Project structure
@@ -66,7 +68,7 @@ flowchart LR
 
 | Service | Owns | Why this framework |
 |---|---|---|
-| **Catalog** | users and JWT issuing, listings, photos, moderation, reviews, notifications | Django Admin, auth, ORM and migrations out of the box: ideal for CRUD and a back-office |
+| **Catalog** | users and JWT issuing, listings, photos, moderation, reviews, support, notifications | Django Admin, auth, ORM and migrations out of the box: ideal for CRUD and a back-office |
 | **Booking** | search, availability, pricing, quotes, bookings, payments and refunds | async I/O and strict typing for the high-traffic path |
 
 Each service has its own database. They don't call each other over HTTP: Booking checks
@@ -134,12 +136,17 @@ To fill the site with demo listings (300 places in 8 cities): `python loadtest/s
 A deliberately small showcase of the API in [`frontend/`](frontend); the backend is the
 main part of this project.
 
-- **Search**: filters and a map with price tags; "Search this area" searches what the
-  map shows. Filters live in the URL, so a search can be shared.
+- **Search**: filters and a grid of places; "Show map" switches to a map with price tags,
+  where "Search this area" searches what the map shows. Filters live in the URL, so a
+  search can be shared.
 - **Listing**: photos, amenities, reviews, free nights for six weeks and the price for
   the chosen dates.
 - **Booking**: log in or register, book, pay on the provider's page; the status turns to
   "Confirmed" when the payment webhook arrives. Cancel to see the refund.
+
+- **Help**: write to support about a booking, a payment or the account, and follow the
+  conversation. Staff answer in Django Admin (Support requests); the user also gets the
+  answer by email.
 
 Hosts manage listings through the API (Swagger) and moderators through Django Admin.
 
@@ -164,6 +171,10 @@ owning service by Nginx.
 | GET | `/api/v1/reviews/pending` | user | Own finished stays that can still be reviewed |
 | POST | `/api/v1/reviews` | user | Review a finished stay: 1 to 5 and a text, once, within 14 days |
 | POST | `/api/v1/host/reviews/{id}/reply` | host | Reply publicly to a review, once |
+| GET, POST | `/api/v1/support/tickets` | user | Own support requests; open a new one |
+| GET | `/api/v1/support/tickets/{id}` | user | A request with its messages |
+| POST | `/api/v1/support/tickets/{id}/messages` | user | Write to support again |
+| POST | `/api/v1/support/tickets/{id}/close` | user | Close a solved request |
 | GET, POST | `/api/v1/host/listings` | host | Own listings |
 | GET, PATCH, DELETE | `/api/v1/host/listings/{id}` | host | Manage a listing |
 | POST | `/api/v1/host/listings/{id}/submit` | host | Send for moderation |

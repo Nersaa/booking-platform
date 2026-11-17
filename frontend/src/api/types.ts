@@ -88,3 +88,28 @@ export type Booking = {
 export type Payment = { id: string; checkout_url: string }
 
 export type User = { id: string; email: string; first_name: string; is_host: boolean }
+
+export type TicketStatus = 'open' | 'answered' | 'closed'
+
+export type Ticket = {
+  id: string
+  topic: string
+  subject: string
+  booking_id: string | null
+  status: TicketStatus
+  created_at: string
+  updated_at: string
+}
+
+export type SupportMessage = {
+  id: string
+  text: string
+  from_support: boolean
+  author_name: string
+  created_at: string
+}
+
+export type TicketDetail = Ticket & { messages: SupportMessage[] }
+
+// Django REST framework's page format (Catalog), unlike Booking's `Page`.
+export type DrfPage<T> = { count: number; results: T[] }

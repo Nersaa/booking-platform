@@ -4,51 +4,34 @@ import type { SearchItem } from '../api/types'
 import { money, plural } from '../format'
 import Cover from './Cover'
 
-type Props = {
-  item: SearchItem
-  to: string
-  onHover: (id: string | null) => void
-}
-
-export default function ListingCard({ item, to, onHover }: Props) {
+export default function ListingCard({ item, to }: { item: SearchItem; to: string }) {
   return (
-    <Link
-      to={to}
-      className="card"
-      onMouseEnter={() => onHover(item.id)}
-      onMouseLeave={() => onHover(null)}
-    >
+    <Link to={to} className="card">
       <Cover url={item.cover_photo_url} propertyType={item.property_type} className="card-cover" />
-      <div className="card-body">
+      <div className="card-head">
         <h2 className="card-title">{item.title}</h2>
-        <p className="muted">
-          {capitalize(item.property_type)} in {item.city},{' '}
-          {item.bedrooms === 0 ? 'studio' : plural(item.bedrooms, 'bedroom')}, up to{' '}
-          {plural(item.max_guests, 'guest')}
-        </p>
-        <p className="card-rating">
-          {item.rating ? (
-            <>
-              <span className="star">★</span> {item.rating} ({plural(item.review_count, 'review')})
-            </>
-          ) : (
-            <span className="muted">No reviews yet</span>
-          )}
-        </p>
+        {item.rating && (
+          <span className="card-rating">
+            <span className="star">★</span> {item.rating}
+          </span>
+        )}
       </div>
-      <div className="card-price">
+      <p className="muted">
+        {capitalize(item.property_type)},{' '}
+        {item.bedrooms === 0 ? 'studio' : plural(item.bedrooms, 'bedroom')}, up to{' '}
+        {plural(item.max_guests, 'guest')}
+      </p>
+      <p className="card-price">
         {item.stay_total !== null ? (
           <>
-            <strong>{money(item.stay_total, item.currency)}</strong>
-            <span className="muted">for the stay</span>
+            <strong>{money(item.stay_total, item.currency)}</strong> for the stay
           </>
         ) : (
           <>
-            <strong>{money(item.nightly_price, item.currency)}</strong>
-            <span className="muted">per night</span>
+            <strong>{money(item.nightly_price, item.currency)}</strong> per night
           </>
         )}
-      </div>
+      </p>
     </Link>
   )
 }

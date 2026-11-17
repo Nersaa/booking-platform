@@ -19,6 +19,7 @@ backend/
 | `apps/users/` | registration, login, JWT tokens (RS256) and the public key at `/.well-known/jwks.json` |
 | `apps/listings/` | listings, moderation (Django Admin), photo uploads to S3 and their processing in Celery |
 | `apps/reviews/` | reviews after a stay, host replies, the listing rating |
+| `apps/support/` | help requests from users; staff answer them in Django Admin |
 | `apps/notifications/` | reads booking events from RabbitMQ and sends emails |
 | `apps/outbox/` | saves events with the change and sends them to RabbitMQ (Celery beat task) |
 | `apps/common/` | shared pieces: error format, pagination, health checks, S3 helpers |

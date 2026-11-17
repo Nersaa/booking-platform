@@ -13,7 +13,7 @@ export default function Header() {
       <nav className="nav">
         <NavLink to="/">Search</NavLink>
         {isLoggedIn && <NavLink to="/bookings">My bookings</NavLink>}
-        <a href="/api/docs/booking/">API docs</a>
+        {isLoggedIn && <NavLink to="/support">Help</NavLink>}
         {isLoggedIn ? (
           <button className="link-button" onClick={logout}>
             Log out{user ? ` (${user.first_name})` : ''}

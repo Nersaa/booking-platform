@@ -5,6 +5,8 @@ import BookingsPage from './pages/BookingsPage'
 import ListingPage from './pages/ListingPage'
 import LoginPage from './pages/LoginPage'
 import SearchPage from './pages/SearchPage'
+import SupportPage from './pages/SupportPage'
+import TicketPage from './pages/TicketPage'
 
 export default function App() {
   return (
@@ -15,6 +17,8 @@ export default function App() {
         <Route path="/listings/:id" element={<ListingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/bookings" element={<BookingsPage />} />
+        <Route path="/support" element={<SupportPage />} />
+        <Route path="/support/:id" element={<TicketPage />} />
         <Route path="*" element={<p className="page notice">This page does not exist.</p>} />
       </Routes>
     </>

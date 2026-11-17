@@ -9,13 +9,13 @@ type Props = {
   items: SearchItem[]
   center: [number, number] | null // null while the user searches a map area of their own
   bbox: string | null // that map area: "min_lon,min_lat,max_lon,max_lat"
-  highlightedId: string | null
-  onOpen: (item: SearchItem) => void
+  selectedId: string | null
+  onSelect: (item: SearchItem) => void
   onSearchArea: (bbox: string) => void
 }
 
 export default function ResultsMap(props: Props) {
-  const { items, center, bbox, highlightedId, onOpen, onSearchArea } = props
+  const { items, center, bbox, selectedId, onSelect, onSearchArea } = props
   // Where the map opens: the city, or the area from a shared link.
   const [west, south, east, north] = (bbox ?? '').split(',').map(Number)
   const start = center
@@ -34,9 +34,9 @@ export default function ResultsMap(props: Props) {
         <Marker
           key={item.id}
           position={[Number(item.latitude), Number(item.longitude)]}
-          icon={priceTag(item, item.id === highlightedId)}
-          zIndexOffset={item.id === highlightedId ? 1000 : 0}
-          eventHandlers={{ click: () => onOpen(item) }}
+          icon={priceTag(item, item.id === selectedId)}
+          zIndexOffset={item.id === selectedId ? 1000 : 0}
+          eventHandlers={{ click: () => onSelect(item) }}
         />
       ))}
     </MapContainer>
@@ -44,12 +44,12 @@ export default function ResultsMap(props: Props) {
 }
 
 // A marker that shows the nightly price instead of a pin.
-function priceTag(item: SearchItem, highlighted: boolean) {
+function priceTag(item: SearchItem, selected: boolean) {
   const price = money(item.nightly_price, item.currency)
   return L.divIcon({
     className: '',
     iconSize: [0, 0],
-    html: `<span class="price-tag${highlighted ? ' is-highlighted' : ''}">${price}</span>`,
+    html: `<span class="price-tag${selected ? ' is-selected' : ''}">${price}</span>`,
   })
 }
 
