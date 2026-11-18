@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import type { Calendar, Listing, ReviewPage } from '../api/types'
 import BookingBox from '../components/BookingBox'
-import Cover from '../components/Cover'
+import Gallery from '../components/Gallery'
 import DateRangePicker, { toIso } from '../components/DateRangePicker'
 import SaveButton from '../components/SaveButton'
 import { plural, shortDate } from '../format'
@@ -48,11 +48,15 @@ export default function ListingPage() {
   if (listing.error) return <p className="page notice notice-error">{listing.error.message}</p>
 
   const place = listing.data
-  const photo = place.photos[0]?.large_url
   return (
     <main className="page listing">
       <div className="listing-main">
-        <Cover url={photo} propertyType={place.property_type} className="listing-cover" />
+        <Gallery
+          key={place.id}
+          photos={place.photos}
+          propertyType={place.property_type}
+          title={place.title}
+        />
         <div className="listing-title">
           <h1>{place.title}</h1>
           <SaveButton listingId={place.id} />

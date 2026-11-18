@@ -121,9 +121,17 @@ the API says whether it came from the host. The website reads new messages every
 ## Website
 
 `frontend/` is a small React + TypeScript app (Vite). It is built into static files and
-served by its own Nginx container; the gateway sends `/api`, `/admin` and `/media` to the
-backend and everything else to the site, so the browser talks to one origin and no CORS
-setup is needed.
+served by its own Nginx container; the gateway sends `/api`, `/admin`, `/media` and
+`/storage` to the backend and everything else to the site, so the browser talks to one
+origin and no CORS setup is needed.
+
+- Photo uploads: the page asks Catalog for a presigned POST, sends the file with
+  `FormData` to `/storage/...` (object storage behind the gateway, POST only), confirms
+  the upload and re-reads the listing every 2 seconds while a photo is still processing.
+- A host's place lives in two services: details and photos in Catalog, prices and closed
+  dates in Booking. Booking learns about a place from the "published" event, so the
+  prices form appears only for published places and retries for a few seconds right
+  after publishing.
 
 - Requests go through one helper (`src/api/client.ts`) that adds the JWT and, when the
   access token has expired, gets a new one with the refresh token and repeats the

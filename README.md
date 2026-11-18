@@ -23,8 +23,9 @@ results: [docs/load-testing.md](docs/load-testing.md).
   password change and "become a host".
 - Redis cache and rate limits, Prometheus metrics and a Grafana dashboard, Locust load
   test, CI that tests the services and publishes Docker images.
-- A small website (React + TypeScript): search with filters and a map view, a date
-  calendar with prices, booking and payment, messages, saved places, reviews, profile.
+- A small website (React + TypeScript): search with filters and a map view, a photo
+  gallery, a date calendar with prices, booking and payment, messages, saved places,
+  reviews, profile, and for hosts: adding places with photos, prices and closed dates.
 
 ## Project structure
 
@@ -117,7 +118,10 @@ docker compose up -d --build
 docker compose exec catalog-api python manage.py createsuperuser
 ```
 
-To fill the site with demo listings (300 places in 8 cities): `python loadtest/seed.py`.
+To fill the site with demo listings (300 places in 8 cities, each with 3-5 photos):
+`python loadtest/seed.py`. Listings seeded before photos existed get them with
+`docker compose exec catalog-api python manage.py seed_photos`. The demo photos are free
+Unsplash images, see [`backend/catalog/demo/photos/CREDITS.md`](backend/catalog/demo/photos/CREDITS.md).
 
 | URL | What |
 |---|---|
@@ -142,7 +146,8 @@ main part of this project.
   place, bedrooms, rating, amenities. Results come as a grid of places; "Show map"
   switches to a map with price tags, where "Search this area" searches what the map
   shows. Filters live in the URL, so a search can be shared.
-- **Listing**: photos, amenities, reviews and a calendar for the next six months: taken
+- **Listing**: a photo gallery (arrows, thumbnails, keyboard), amenities, reviews and a
+  calendar for the next six months: taken
   nights are greyed out and every free night shows its price. The heart saves the place
   to "Saved".
 - **Booking**: log in or register and book. The booking's page shows the price, the
@@ -150,15 +155,19 @@ main part of this project.
   card `4242 4242 4242 4242` pays and `4000 0000 0000 0002` is declined. After paying,
   the guest comes back to the booking and sees it confirmed. Cancel to see the refund.
   The same page has messages with the host, and after the stay a form to rate it.
-- **Hosting** (for hosts): bookings of their places, each with the conversation with the
-  guest and a cancel button.
+- **Hosting** (for hosts): their places and the bookings of them, each booking with the
+  conversation with the guest and a cancel button.
+- **Add a place** (for hosts): details, amenities and a point on the map; then photos
+  (uploaded straight to object storage), "Send for review", and once a moderator has
+  published it in Django Admin, prices and closed dates. Drafts can be deleted,
+  published places archived.
 - **Profile**: name, password, "Become a host".
 
 - **Help**: write to support about a booking, a payment or the account, and follow the
   conversation. Staff answer in Django Admin (Support requests); the user also gets the
   answer by email.
 
-Hosts manage listings through the API (Swagger) and moderators through Django Admin.
+Moderators publish or reject listings in Django Admin (Listings).
 
 ## API
 
@@ -285,6 +294,8 @@ stateDiagram-v2
 
 1. `POST .../photos` returns a presigned POST pinned to the key, content type and 10 MB.
 2. The client uploads the file straight to object storage; API workers never see the bytes.
+   Browsers post to `http://localhost/storage/...`: the gateway passes only POSTs on to
+   the storage, so the site and the upload share one origin and need no CORS setup.
 3. `POST .../complete` queues a Celery task that validates the image, renders WebP
    variants without EXIF (no GPS leaks) and deletes the private original.
 

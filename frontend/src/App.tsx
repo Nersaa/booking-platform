@@ -5,8 +5,10 @@ import BookingPage from './pages/BookingPage'
 import BookingsPage from './pages/BookingsPage'
 import HostBookingPage from './pages/HostBookingPage'
 import HostingPage from './pages/HostingPage'
+import HostListingPage from './pages/HostListingPage'
 import ListingPage from './pages/ListingPage'
 import LoginPage from './pages/LoginPage'
+import NewListingPage from './pages/NewListingPage'
 import ProfilePage from './pages/ProfilePage'
 import SavedPage from './pages/SavedPage'
 import SearchPage from './pages/SearchPage'
@@ -27,6 +29,8 @@ export default function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/hosting" element={<HostingPage />} />
         <Route path="/hosting/:id" element={<HostBookingPage />} />
+        <Route path="/hosting/listings/new" element={<NewListingPage />} />
+        <Route path="/hosting/listings/:id" element={<HostListingPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/support/:id" element={<TicketPage />} />
         <Route path="*" element={<p className="page notice">This page does not exist.</p>} />

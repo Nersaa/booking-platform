@@ -94,6 +94,16 @@ def listing_add_review_score(*, listing_id: uuid.UUID, rating: int) -> Listing:
 
 
 @transaction.atomic
+def listing_announce_change(*, listing: Listing) -> None:
+    """Tell other services about a change made outside these functions (demo photos)."""
+    listing = _lock(listing)
+    if listing.status == S.PUBLISHED:
+        listing.version += 1
+        listing.save(update_fields=["version", "updated_at"])
+        emit_listing_event(listing, ListingEventType.UPDATED)
+
+
+@transaction.atomic
 def listing_submit_for_review(*, listing: Listing) -> Listing:
     listing = _lock(listing)
     if not listing.photos.filter(status=PhotoStatus.READY).exists():

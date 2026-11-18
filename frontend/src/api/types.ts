@@ -141,3 +141,51 @@ export type SavedListing = {
 export type BookingMessage = { id: string; text: string; from_host: boolean; created_at: string }
 
 export type PendingReview = { booking_id: string; review_deadline: string }
+
+export type ListingStatus = 'draft' | 'pending_review' | 'published' | 'rejected' | 'archived'
+
+export type HostPhoto = {
+  id: string
+  status: 'pending_upload' | 'processing' | 'ready' | 'failed'
+  thumb_url: string | null
+}
+
+export type HostListing = {
+  id: string
+  status: ListingStatus
+  rejection_reason: string
+  title: string
+  description: string
+  property_type: string
+  country: string
+  city: string
+  address: string
+  latitude: string
+  longitude: string
+  max_guests: number
+  bedrooms: number
+  beds: number
+  bathrooms: number
+  amenities: Amenity[]
+  photos: HostPhoto[]
+}
+
+export type PhotoUpload = {
+  photo: HostPhoto
+  upload: { url: string; fields: Record<string, string> }
+}
+
+export type Pricing = {
+  currency: string
+  nightly_price: number
+  weekend_price: number | null
+  cleaning_fee: number
+  min_nights: number
+  max_nights: number
+  weekly_discount_percent: number
+  monthly_discount_percent: number
+}
+
+export type Block = { id: string; start_date: string; end_date: string; note: string }
+
+export type HostListingPage = { count: number; results: HostListing[] }

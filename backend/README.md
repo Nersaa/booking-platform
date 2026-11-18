@@ -17,7 +17,7 @@ backend/
 |---|---|
 | `config/` | Django settings, URLs, Celery app |
 | `apps/users/` | registration, login, JWT tokens (RS256) and the public key at `/.well-known/jwks.json` |
-| `apps/listings/` | listings, moderation (Django Admin), photo uploads to S3 and their processing in Celery |
+| `apps/listings/` | listings, moderation (Django Admin), photo uploads to S3 and their processing in Celery, demo data (`seed_listings`, `seed_photos`) |
 | `apps/reviews/` | reviews after a stay, host replies, the listing rating |
 | `apps/support/` | help requests from users; staff answer them in Django Admin |
 | `apps/favorites/` | listings users saved for later |

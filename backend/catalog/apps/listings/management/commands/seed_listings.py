@@ -1,4 +1,5 @@
-"""Demo data for local runs and load tests: published listings around European cities.
+"""Demo data for local runs and load tests: published listings with photos around European
+cities.
 
 Publishing goes through the normal service, so every listing also reaches Booking
 through the outbox. Prints JSON with the host's access token (to set prices in Booking)
@@ -14,6 +15,7 @@ from typing import Any
 from django.core.management.base import BaseCommand
 
 from apps.listings import services
+from apps.listings.demo_photos import add_demo_photos
 from apps.listings.models import Amenity, Listing, ListingStatus, PropertyType
 from apps.users.models import User
 from apps.users.tokens import issue_token_pair
@@ -68,6 +70,7 @@ class Command(BaseCommand):
                 bathrooms=rng.randint(1, 2),
             )
             listing.amenities.set(rng.sample(amenities, k=min(len(amenities), rng.randint(2, 6))))
+            add_demo_photos(listing, rng)
             services.listing_publish(listing=listing)
             ids.append(str(listing.id))
 

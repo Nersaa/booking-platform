@@ -15,7 +15,7 @@ ignore = ["RUF012"]
 # Random demo and load data is not cryptography; the seeder calls the local docker CLI and
 # the local gateway only.
 "loadtest/**" = ["S310", "S311", "S603", "S607"]
-"**/commands/seed_listings.py" = ["S311"]
+"**/commands/seed_*.py" = ["S311"]
 
 [lint.isort]
 known-first-party = ["app", "apps", "config", "tests"]

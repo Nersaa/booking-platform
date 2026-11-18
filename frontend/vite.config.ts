@@ -10,6 +10,7 @@ export default defineConfig({
     proxy: {
       '/api': backend,
       '/media': backend,
+      '/storage': backend,
     },
   },
 })
