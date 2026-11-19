@@ -16,6 +16,10 @@ results: [docs/load-testing.md](docs/load-testing.md).
 - Search by map area or distance, dates, guests, amenities, price and rating.
 - Bookings with a 15-minute hold, payments through a Stripe-like mock with signed
   webhooks, cancellations with refunds by policy.
+- Instant booking or booking requests, per place: with requests the host accepts or
+  declines within 24 hours, otherwise the request expires.
+- Statistics for hosts: revenue, bookings and occupancy by month, the best places
+  (SQL aggregations: `date_trunc`, `generate_series`, `GROUP BY`).
 - Emails on booking events, reviews after the stay, ratings in search.
 - Help desk: users write to support from the website, staff answer in Django Admin and
   the answer also arrives by email.
@@ -119,7 +123,8 @@ docker compose exec catalog-api python manage.py createsuperuser
 ```
 
 To fill the site with demo listings (300 places in 8 cities, each with 3-5 photos):
-`python loadtest/seed.py`. Listings seeded before photos existed get them with
+`python loadtest/seed.py`; it also adds a year of past stays for the host's statistics
+(`docker compose exec booking-api python -m app.demo_stays`). Listings seeded before photos existed get them with
 `docker compose exec catalog-api python manage.py seed_photos`. The demo photos are free
 Unsplash images, see [`backend/catalog/demo/photos/CREDITS.md`](backend/catalog/demo/photos/CREDITS.md).
 
@@ -155,11 +160,16 @@ main part of this project.
   card `4242 4242 4242 4242` pays and `4000 0000 0000 0002` is declined. After paying,
   the guest comes back to the booking and sees it confirmed. Cancel to see the refund.
   The same page has messages with the host, and after the stay a form to rate it.
-- **Hosting** (for hosts): their places and the bookings of them, each booking with the
-  conversation with the guest and a cancel button.
+  A place without instant booking shows "Request to book": the booking waits for the
+  host's answer, and the guest pays after the host accepts.
+- **Hosting** (for hosts): requests to answer (accept or decline), their places and the
+  upcoming stays, each with the conversation with the guest and a cancel button.
+- **Statistics** (for hosts): revenue, bookings, average booking and occupancy for a
+  year, a chart by month and the best places.
 - **Add a place** (for hosts): details, amenities and a point on the map; then photos
   (uploaded straight to object storage), "Send for review", and once a moderator has
-  published it in Django Admin, prices and closed dates. Drafts can be deleted,
+  published it in Django Admin, prices, closed dates and whether guests book
+  instantly or send requests. Drafts can be deleted,
   published places archived.
 - **Profile**: name, password, "Become a host".
 
@@ -214,7 +224,7 @@ Amounts are integers in minor units (cents). Periods are `[start_date, end_date)
 | GET | `/api/v1/listings` | anyone | Search: map area or point, dates, filters, sorting |
 | GET | `/api/v1/listings/{id}/calendar` | anyone | Nightly availability and prices |
 | GET | `/api/v1/listings/{id}/quote` | anyone | Price breakdown for `check_in`, `check_out`, `guests` |
-| GET, PUT | `/api/v1/host/listings/{id}/pricing` | host | Nightly, weekend price, cleaning fee, stay limits, discounts |
+| GET, PUT | `/api/v1/host/listings/{id}/pricing` | host | Nightly, weekend price, cleaning fee, stay limits, discounts, `instant_book` |
 | GET, POST | `/api/v1/host/listings/{id}/seasonal-rates` | host | Prices for a period (no overlaps) |
 | DELETE | `/api/v1/host/listings/{id}/seasonal-rates/{rate_id}` | host | Remove a seasonal rate |
 | GET, POST | `/api/v1/host/listings/{id}/blocks` | host | Close dates for guests (no overlaps) |
@@ -237,18 +247,26 @@ A listing is bookable once it is published and priced.
 
 | Method | Path | Who | Description |
 |---|---|---|---|
-| POST | `/api/v1/bookings` | user | Book: prices the stay and holds the dates for 15 minutes |
+| POST | `/api/v1/bookings` | user | Book: prices the stay and holds the dates for 15 minutes (a request: 24 hours for the host's answer) |
 | GET | `/api/v1/bookings`, `/api/v1/bookings/{id}` | guest | Own bookings, newest first |
 | POST | `/api/v1/bookings/{id}/payments` | guest | Start a payment, get the checkout URL |
 | POST | `/api/v1/bookings/{id}/cancel` | guest | Cancel; refund by policy |
 | GET, POST | `/api/v1/bookings/{id}/messages` | guest | Messages with the host |
-| GET | `/api/v1/host/bookings`, `/api/v1/host/bookings/{id}` | host | Stays at own listings, by check-in date |
+| GET | `/api/v1/host/bookings`, `/api/v1/host/bookings/{id}` | host | Stays at own listings, by check-in date; `status`, `upcoming` filters |
+| POST | `/api/v1/host/bookings/{id}/accept` | host | Accept a request; the guest has 24 hours to pay |
+| POST | `/api/v1/host/bookings/{id}/decline` | host | Decline a request; the dates are free again |
 | POST | `/api/v1/host/bookings/{id}/cancel` | host | Cancel; the guest gets a full refund |
+| GET | `/api/v1/host/stats?year=2026` | host | Revenue, bookings, occupancy by month, best places |
 | GET, POST | `/api/v1/host/bookings/{id}/messages` | host | Messages with the guest |
 
 ```mermaid
 stateDiagram-v2
     [*] --> pending_payment: book (dates held 15 min)
+    [*] --> awaiting_host: request (dates held 24 h)
+    awaiting_host --> pending_payment: host accepts (24 h to pay)
+    awaiting_host --> declined: host declines
+    awaiting_host --> expired: no answer in time
+    awaiting_host --> cancelled: guest withdraws
     pending_payment --> confirmed: payment.succeeded webhook
     pending_payment --> expired: hold ran out
     pending_payment --> cancelled: guest

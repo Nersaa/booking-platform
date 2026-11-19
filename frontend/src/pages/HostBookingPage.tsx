@@ -5,7 +5,7 @@ import { api } from '../api/client'
 import type { Booking, Listing } from '../api/types'
 import { useAuth } from '../auth'
 import BookingChat from '../components/BookingChat'
-import { money, plural, shortDate } from '../format'
+import { dateTime, money, plural, shortDate } from '../format'
 import { STATUS_LABELS } from './BookingsPage'
 
 // One booking of the host's place: the stay, the money and the conversation with the guest.
@@ -26,14 +26,29 @@ export default function HostBookingPage() {
     enabled: listingId !== undefined,
   })
 
+  const updated = (data: Booking) => {
+    queryClient.setQueryData(['host-booking', id], data)
+    queryClient.invalidateQueries({ queryKey: ['host-bookings'] })
+  }
+  const answer = useMutation({
+    mutationFn: ({ action, reason }: { action: 'accept' | 'decline'; reason?: string }) =>
+      api<Booking>(`/api/v1/host/bookings/${id}/${action}`, {
+        method: 'POST',
+        body: action === 'decline' ? { reason } : undefined,
+      }),
+    onSuccess: updated,
+  })
+
   const cancel = useMutation({
     mutationFn: () =>
       api<Booking>(`/api/v1/host/bookings/${id}/cancel`, { method: 'POST', body: {} }),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(['host-booking', id], updated)
-      queryClient.invalidateQueries({ queryKey: ['host-bookings'] })
-    },
+    onSuccess: updated,
   })
+
+  function decline() {
+    const reason = window.prompt('Decline this request? You can tell the guest why (optional).')
+    if (reason !== null) answer.mutate({ action: 'decline', reason })
+  }
 
   if (!isLoggedIn) return <Navigate to={`/login?next=/hosting/${id}`} replace />
   if (booking.isPending) return <p className="page notice">Loading…</p>
@@ -56,6 +71,32 @@ export default function HostBookingPage() {
         {shortDate(b.check_in)} to {shortDate(b.check_out)}, {plural(nights, 'night')},{' '}
         {plural(b.guests, 'guest')}. Total {money(b.total, b.currency)}.
       </p>
+      {b.status === 'awaiting_host' && (
+        <section className="status-panel">
+          <div>
+            <h2>The guest asks to book</h2>
+            <p>
+              Answer by{' '}
+              {b.hold_expires_at && <strong>{dateTime(b.hold_expires_at)}</strong>}, or the
+              request expires and the dates are free again. After you accept, the guest has a
+              day to pay.
+            </p>
+          </div>
+          <div className="form-actions">
+            <button
+              className="primary"
+              disabled={answer.isPending}
+              onClick={() => answer.mutate({ action: 'accept' })}
+            >
+              Accept
+            </button>
+            <button disabled={answer.isPending} onClick={decline}>
+              Decline
+            </button>
+          </div>
+        </section>
+      )}
+      {answer.error && <p className="notice notice-error">{answer.error.message}</p>}
       {canCancel && (
         <p>
           <button

@@ -3,7 +3,9 @@
     python loadtest/seed.py --count 300
 
 Listings are created and published in Catalog (`manage.py seed_listings`), reach Booking
-through the outbox, then get a price through the public API. Standard library only.
+through the outbox, then get a price through the public API. Finally Booking gets a year
+of past stays (`python -m app.demo_stays`) for the host's statistics. Standard library
+only.
 """
 
 import argparse
@@ -90,6 +92,10 @@ def main() -> None:
         if n % 50 == 0:
             print(f"priced {n}/{len(seeded['listing_ids'])}")
     print(f"Seeded {len(seeded['listing_ids'])} bookable listings.")
+    subprocess.run(
+        ["docker", "compose", "exec", "-T", "booking-api", "python", "-m", "app.demo_stays"],
+        check=True,
+    )
 
 
 if __name__ == "__main__":

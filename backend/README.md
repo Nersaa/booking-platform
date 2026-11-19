@@ -34,11 +34,13 @@ through here), `views.py` + `serializers.py` (HTTP), `tasks.py` (Celery).
 | Folder / file | Responsible for |
 |---|---|
 | `app/main.py` | the FastAPI app: routers, middleware, startup |
-| `app/worker.py`, `app/jobs.py` | the worker process: reads listing events, sends booking events, expires unpaid holds, completes stays |
+| `app/worker.py`, `app/jobs.py` | the worker process: reads listing events, sends booking events, expires unpaid holds and unanswered requests, completes stays |
 | `app/listings/` | Booking's own copy of the listings, updated from Catalog's events |
 | `app/search/` | `GET /api/v1/listings`: map, dates and filters in one PostGIS query |
 | `app/availability/` | host prices, seasonal rates, closed dates; calendar and price quotes |
-| `app/bookings/` | bookings and their statuses, cancellation policy, guest-host messages |
+| `app/bookings/` | bookings and their statuses (instant or a request to the host), cancellation policy, guest-host messages |
+| `app/stats/` | the host's statistics: revenue, bookings and occupancy by month, in plain SQL |
+| `app/demo_stays.py` | a year of past stays for the demo (development only) |
 | `app/payments/` | payment provider client, signed webhooks, refunds |
 | `app/auth.py` | checks Catalog's JWTs with its public key |
 | `app/ratelimit.py`, `app/cache.py` | request limits and the search cache in Redis |

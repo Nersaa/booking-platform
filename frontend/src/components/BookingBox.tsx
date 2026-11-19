@@ -101,7 +101,7 @@ export default function BookingBox({ listingId, maxGuests, calendar }: Props) {
           disabled={!quote.data || book.isPending}
           onClick={() => book.mutate()}
         >
-          {book.isPending ? 'Booking…' : 'Book'}
+          {book.isPending ? 'Sending…' : calendar.instant_book ? 'Book' : 'Request to book'}
         </button>
       ) : (
         <Link
@@ -112,7 +112,9 @@ export default function BookingBox({ listingId, maxGuests, calendar }: Props) {
         </Link>
       )}
       <p className="muted small">
-        Booking holds the dates for 15 minutes. You pay on the next step.
+        {calendar.instant_book
+          ? 'Booking holds the dates for 15 minutes. You pay on the next step.'
+          : 'The host answers within 24 hours and the dates are held meanwhile. You pay only after they accept.'}
       </p>
     </aside>
   )

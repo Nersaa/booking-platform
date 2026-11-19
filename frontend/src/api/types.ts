@@ -57,6 +57,7 @@ export type Calendar = {
   currency: string
   min_nights: number
   max_nights: number
+  instant_book: boolean // false: the host accepts each booking first
   days: { date: string; available: boolean; nightly_price: number }[]
 }
 
@@ -69,7 +70,14 @@ export type Quote = {
   total: number
 }
 
-export type BookingStatus = 'pending_payment' | 'confirmed' | 'cancelled' | 'expired' | 'completed'
+export type BookingStatus =
+  | 'awaiting_host'
+  | 'pending_payment'
+  | 'confirmed'
+  | 'cancelled'
+  | 'expired'
+  | 'completed'
+  | 'declined'
 
 export type Booking = {
   id: string
@@ -184,6 +192,29 @@ export type Pricing = {
   max_nights: number
   weekly_discount_percent: number
   monthly_discount_percent: number
+  instant_book: boolean
+}
+
+export type MonthStats = {
+  month: string
+  bookings: number
+  revenue: number
+  nights: number
+  occupancy_percent: number
+}
+
+export type HostStats = {
+  year: number
+  currency: string
+  currencies: string[]
+  listed_places: number
+  revenue: number
+  bookings: number
+  average_booking: number
+  nights: number
+  occupancy_percent: number
+  months: MonthStats[]
+  top_listings: { listing_id: string; title: string; bookings: number; revenue: number }[]
 }
 
 export type Block = { id: string; start_date: string; end_date: string; note: string }

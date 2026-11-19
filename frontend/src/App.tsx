@@ -6,6 +6,7 @@ import BookingsPage from './pages/BookingsPage'
 import HostBookingPage from './pages/HostBookingPage'
 import HostingPage from './pages/HostingPage'
 import HostListingPage from './pages/HostListingPage'
+import HostStatsPage from './pages/HostStatsPage'
 import ListingPage from './pages/ListingPage'
 import LoginPage from './pages/LoginPage'
 import NewListingPage from './pages/NewListingPage'
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/saved" element={<SavedPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/hosting" element={<HostingPage />} />
+        <Route path="/hosting/stats" element={<HostStatsPage />} />
         <Route path="/hosting/:id" element={<HostBookingPage />} />
         <Route path="/hosting/listings/new" element={<NewListingPage />} />
         <Route path="/hosting/listings/:id" element={<HostListingPage />} />

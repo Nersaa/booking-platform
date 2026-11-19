@@ -172,6 +172,7 @@ async def get_calendar(
         currency=pricing.currency,
         min_nights=pricing.min_nights,
         max_nights=pricing.max_nights,
+        instant_book=pricing.instant_book,
         days=[
             CalendarDay(
                 date=night,

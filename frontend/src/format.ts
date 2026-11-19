@@ -14,6 +14,17 @@ export function time(isoDateTime: string): string {
   return new Date(isoDateTime).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })
 }
 
+// "Thu 20 Nov, 14:05"
+export function dateTime(isoDateTime: string): string {
+  return new Date(isoDateTime).toLocaleString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 export function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? '' : 's'}`
 }

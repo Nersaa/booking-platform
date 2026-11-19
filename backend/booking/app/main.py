@@ -20,6 +20,7 @@ from app.payments.provider import HttpPaymentProvider
 from app.payments.router import router as payments_router
 from app.search.router import router as search_router
 from app.settings import Settings, get_settings
+from app.stats.router import router as stats_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -68,5 +69,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(host_router)
     app.include_router(bookings_router)
     app.include_router(host_bookings_router)
+    app.include_router(stats_router)
     app.include_router(payments_router)
     return app

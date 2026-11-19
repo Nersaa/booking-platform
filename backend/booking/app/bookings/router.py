@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request, status
 
 from app.auth import HostDep, Principal, current_principal
 from app.bookings import service
+from app.bookings.models import BookingStatus
 from app.bookings.schemas import (
     BookingIn,
     BookingOut,
@@ -32,9 +33,20 @@ guest_router = APIRouter(prefix="/api/v1/bookings", tags=["bookings"])
 async def create_booking(
     request: Request, session: SessionDep, guest: UserDep, body: BookingIn
 ) -> BookingOut:
-    """Hold the dates for a limited time; pay before `hold_expires_at` to confirm."""
-    hold = timedelta(minutes=request.app.state.settings.hold_minutes)
-    return BookingOut.from_model(await service.create_booking(session, guest, body, hold))
+    """Hold the dates for a limited time; pay before `hold_expires_at` to confirm.
+
+    If the place is not instantly bookable, the booking is a request (`awaiting_host`):
+    the host has until `hold_expires_at` to accept it, and the guest pays after that.
+    """
+    settings = request.app.state.settings
+    booking = await service.create_booking(
+        session,
+        guest,
+        body,
+        hold=timedelta(minutes=settings.hold_minutes),
+        request_window=timedelta(hours=settings.request_hours),
+    )
+    return BookingOut.from_model(booking)
 
 
 @guest_router.get("")
@@ -106,11 +118,19 @@ async def list_host_bookings(
     session: SessionDep,
     host: HostDep,
     listing_id: UUID | None = None,
+    status: BookingStatus | None = None,
+    upcoming: bool = False,
     limit: Limit = 20,
     offset: Offset = 0,
 ) -> Page[BookingOut]:
-    """Upcoming, current and past stays at the host's listings, by check-in date."""
-    bookings, total = await service.list_host_bookings(session, host, listing_id, limit, offset)
+    """Requests, upcoming, current and past stays at the host's listings, by check-in date.
+
+    `status=awaiting_host` lists only the requests waiting for an answer;
+    `upcoming=true` leaves out the stays that are over.
+    """
+    bookings, total = await service.list_host_bookings(
+        session, host, listing_id, status, upcoming, limit, offset
+    )
     items = [BookingOut.from_model(b) for b in bookings]
     return Page(items=items, total=total, limit=limit, offset=offset)
 
@@ -118,6 +138,25 @@ async def list_host_bookings(
 @host_router.get("/{booking_id}")
 async def get_host_booking(session: SessionDep, host: HostDep, booking_id: UUID) -> BookingOut:
     booking = await service.get_booking(session, host, booking_id, as_host=True)
+    return BookingOut.from_model(booking)
+
+
+@host_router.post("/{booking_id}/accept", dependencies=WRITE_LIMIT)
+async def accept_request(
+    request: Request, session: SessionDep, host: HostDep, booking_id: UUID
+) -> BookingOut:
+    """Accept a request; the guest then has `accepted_pay_hours` to pay for it."""
+    pay_window = timedelta(hours=request.app.state.settings.accepted_pay_hours)
+    booking = await service.accept_request(session, host, booking_id, pay_window)
+    return BookingOut.from_model(booking)
+
+
+@host_router.post("/{booking_id}/decline", dependencies=WRITE_LIMIT)
+async def decline_request(
+    session: SessionDep, host: HostDep, booking_id: UUID, body: CancelIn
+) -> BookingOut:
+    """Decline a request; its dates become free again."""
+    booking = await service.decline_request(session, host, booking_id, body.reason)
     return BookingOut.from_model(booking)
 
 

@@ -95,6 +95,44 @@ def test_cancellation_explains_the_refund(
     assert "The dates are open again" in to_host.body
 
 
+@pytest.mark.parametrize(
+    ("event_type", "to_host", "subject", "line"),
+    [
+        (BookingEventType.REQUESTED, True, "Booking request for Loft & Garden", "within 24 hours"),
+        (
+            BookingEventType.ACCEPTED,
+            False,
+            "Your request for Loft & Garden was accepted",
+            "To pay:    325.00 EUR",
+        ),
+        (
+            BookingEventType.DECLINED,
+            False,
+            "Your request for Loft & Garden was declined",
+            "You have not been charged",
+        ),
+        (
+            BookingEventType.REQUEST_EXPIRED,
+            False,
+            "Your request for Loft & Garden has expired",
+            "did not answer",
+        ),
+    ],
+)
+def test_booking_request_emails_go_to_one_side(
+    stay, django_capture_on_commit_callbacks, event_type, to_host, subject, line
+):
+    listing, guest = stay
+
+    with django_capture_on_commit_callbacks(execute=True):
+        handle_booking_event(event(listing, guest, event_type))
+
+    (email,) = mail.outbox
+    assert email.to == [listing.host.email if to_host else guest.email]
+    assert email.subject == subject
+    assert line in email.body
+
+
 def test_completed_stay_opens_a_review_and_invites_only_the_guest(
     stay, django_capture_on_commit_callbacks
 ):

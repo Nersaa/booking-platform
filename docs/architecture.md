@@ -48,11 +48,25 @@ constraint, so it holds even when two requests arrive at the same moment:
 
 ```sql
 EXCLUDE USING gist (listing_id WITH =, period WITH &&)
-WHERE (status IN ('pending_payment', 'confirmed'))
+WHERE (status IN ('awaiting_host', 'pending_payment', 'confirmed'))
 ```
 
 `period` is a `daterange` `[check_in, check_out)`. A new booking holds the dates for
-15 minutes while the guest pays; a worker job expires unpaid holds. A double click or a
+15 minutes while the guest pays; a worker job expires unpaid holds.
+
+## Booking requests
+
+A host can turn instant booking off for a place (`instant_book` in its pricing). A
+booking then starts as `awaiting_host`: the dates are held for 24 hours, and the guest
+cannot pay yet. The host accepts (the booking moves to `pending_payment` with 24 hours to
+pay) or declines (`declined`, the dates are free). Both answers lock the booking row and
+check the deadline, so an answer after it fails even if the worker has not expired the
+request yet.
+
+The same worker job that expires unpaid holds expires unanswered requests. It does that
+with `UPDATE ... RETURNING`, so it knows which requests expired and writes a
+`booking.request_expired` event for each; Catalog turns these events
+(`booking.requested`, `.accepted`, `.declined`, `.request_expired`) into emails. A double click or a
 race simply gets `409 dates_unavailable`. Tests fire 8 parallel bookings for the same
 dates and expect exactly one to succeed.
 
@@ -109,6 +123,20 @@ a message, the request becomes "Answered" and the user gets an email (Celery).
 
 The status always shows whose turn it is: `open` waits for support, `answered` for the
 user, `closed` takes no more messages. Code: `backend/catalog/apps/support/`.
+
+## Host statistics
+
+`GET /api/v1/host/stats` is counted in SQL, not in Python (`app/stats/service.py`):
+
+- revenue and bookings by month: `GROUP BY date_trunc('month', lower(period))`;
+- nights by month: `generate_series` turns each stay into one row per night, so a stay
+  over the end of a month is split between both months;
+- occupancy: booked nights / (listed places x days in the month);
+- best places: the bookings joined with the listings read model, `ORDER BY revenue`.
+
+Only paid stays count (`confirmed`, `completed`), in one currency at a time. For the demo
+`python -m app.demo_stays` adds a year of completed stays (about 12 500 rows); the
+endpoint answers in under 100 ms.
 
 ## Messages between guest and host
 

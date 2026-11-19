@@ -14,7 +14,7 @@ npm run build
 | Folder | What is inside |
 |---|---|
 | `src/api` | `client.ts`: fetch wrapper with JWT and token refresh; `types.ts`: response types |
-| `src/pages` | Search, Listing, Login, My bookings, one booking with payment, Saved, Profile, Help, Hosting, Add a place, edit a place |
+| `src/pages` | Search, Listing, Login, My bookings, one booking with payment, Saved, Profile, Help, Hosting (with requests to answer), Statistics, Add a place, edit a place |
 | `src/components` | Map with price tags, listing card, gallery, booking box, date picker, header |
 | `src/components/host` | Listing form with a map to pick the point, photo uploads, prices, closed dates |
 | `src/auth.tsx` | Who is logged in (React context) |

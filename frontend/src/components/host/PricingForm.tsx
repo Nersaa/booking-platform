@@ -20,6 +20,7 @@ export default function PricingForm({ listingId, pricing }: Props) {
   const [maxNights, setMaxNights] = useState(pricing?.max_nights ?? 30)
   const [weekly, setWeekly] = useState(pricing?.weekly_discount_percent ?? 0)
   const [monthly, setMonthly] = useState(pricing?.monthly_discount_percent ?? 0)
+  const [instantBook, setInstantBook] = useState(pricing?.instant_book ?? true)
 
   const save = useMutation({
     mutationFn: () =>
@@ -34,6 +35,7 @@ export default function PricingForm({ listingId, pricing }: Props) {
           max_nights: maxNights,
           weekly_discount_percent: weekly,
           monthly_discount_percent: monthly,
+          instant_book: instantBook,
         },
       }),
     onSuccess: (saved) => queryClient.setQueryData(['host-pricing', listingId], saved),
@@ -90,6 +92,14 @@ export default function PricingForm({ listingId, pricing }: Props) {
           <input type="number" min={0} max={90} value={monthly} onChange={(e) => setMonthly(Number(e.target.value))} />
         </label>
       </div>
+      <label className="check">
+        <input type="checkbox" checked={instantBook} onChange={(e) => setInstantBook(e.target.checked)} />
+        Instant booking: guests book without waiting for you
+      </label>
+      <p className="muted small">
+        Turned off, every booking is a request: you accept or decline it within 24 hours
+        under Hosting, and the guest pays after you accept.
+      </p>
       {save.error && <p className="notice notice-error">{save.error.message}</p>}
       {save.isSuccess && <p className="notice">Prices saved. Search and the calendar use them now.</p>}
       <div className="form-actions">

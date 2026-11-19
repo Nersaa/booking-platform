@@ -12,6 +12,11 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class BookingEventType(StrEnum):
+    # A guest asked to book a place that needs the host's answer.
+    REQUESTED = "booking.requested"
+    ACCEPTED = "booking.accepted"
+    DECLINED = "booking.declined"
+    REQUEST_EXPIRED = "booking.request_expired"
     CONFIRMED = "booking.confirmed"
     CANCELLED = "booking.cancelled"
     COMPLETED = "booking.completed"

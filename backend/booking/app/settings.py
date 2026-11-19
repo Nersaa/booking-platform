@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     payment_provider_api_key: str
     payment_webhook_secret: str
     hold_minutes: int = Field(15, description="How long unpaid bookings keep their dates.")
+    request_hours: int = Field(24, description="How long a host has to answer a request.")
+    accepted_pay_hours: int = Field(24, description="Time to pay after the host accepted.")
 
     search_cache_seconds: int = Field(30, ge=0, description="0 disables the search cache.")
     # Requests per minute: per client address for public reads, per user for booking writes.

@@ -26,6 +26,9 @@ class PricingIn(BaseModel):
     max_nights: Nights = 365
     weekly_discount_percent: Percent = Field(0, description="Stays of 7 nights or more.")
     monthly_discount_percent: Percent = Field(0, description="Stays of 28 nights or more.")
+    instant_book: bool = Field(
+        True, description="False: the host accepts or declines every booking first."
+    )
 
     @model_validator(mode="after")
     def check_nights(self) -> Self:
@@ -91,6 +94,7 @@ class CalendarOut(BaseModel):
     currency: str
     min_nights: int
     max_nights: int
+    instant_book: bool
     days: list[CalendarDay]
 
 

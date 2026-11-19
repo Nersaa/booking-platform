@@ -11,11 +11,12 @@ select = [
 ignore = ["RUF012"]
 
 [lint.per-file-ignores]
-"**/tests/**" = ["S101", "S105", "S106"]
+"**/tests/**" = ["S101", "S105", "S106", "S311"]
 # Random demo and load data is not cryptography; the seeder calls the local docker CLI and
 # the local gateway only.
 "loadtest/**" = ["S310", "S311", "S603", "S607"]
 "**/commands/seed_*.py" = ["S311"]
+"**/app/demo_stays.py" = ["S311"]
 
 [lint.isort]
 known-first-party = ["app", "apps", "config", "tests"]

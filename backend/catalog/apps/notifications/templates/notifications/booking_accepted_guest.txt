@@ -1,0 +1,13 @@
+{% autoescape off %}Hi {{ user.first_name }},
+
+good news: the host accepted your request for {{ title }}.
+
+Check-in:  {{ booking.check_in|date:"D, j M Y" }}
+Check-out: {{ booking.check_out|date:"D, j M Y" }} ({{ nights }} night{{ nights|pluralize }})
+Guests:    {{ booking.guests }}
+To pay:    {{ total }}
+
+Pay on the booking's page under "My bookings" within 24 hours to confirm the stay.
+
+Booking reference: {{ booking.id }}
+{% endautoescape %}

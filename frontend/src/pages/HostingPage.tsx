@@ -21,9 +21,19 @@ export default function HostingPage() {
     queryFn: () => api<HostListingPage>('/api/v1/host/listings', { params: { page_size: 100 } }),
     enabled: user?.is_host === true,
   })
+  const requests = useQuery({
+    queryKey: ['host-bookings', 'requests'],
+    queryFn: () =>
+      api<Page<Booking>>('/api/v1/host/bookings', {
+        params: { status: 'awaiting_host', limit: 50 },
+      }),
+    enabled: user?.is_host === true,
+    refetchInterval: 30_000, // new requests show up without a reload
+  })
   const bookings = useQuery({
     queryKey: ['host-bookings'],
-    queryFn: () => api<Page<Booking>>('/api/v1/host/bookings', { params: { limit: 50 } }),
+    queryFn: () =>
+      api<Page<Booking>>('/api/v1/host/bookings', { params: { upcoming: 'true', limit: 50 } }),
     enabled: user?.is_host === true,
   })
 
@@ -32,7 +42,20 @@ export default function HostingPage() {
 
   return (
     <main className="page narrow-wide">
-      <h1>Hosting</h1>
+      <div className="section-head">
+        <h1>Hosting</h1>
+        <Link to="/hosting/stats">Statistics</Link>
+      </div>
+
+      {requests.data && requests.data.total > 0 && (
+        <section className="requests">
+          <h2>Requests to answer ({requests.data.total})</h2>
+          <p className="muted">Accept or decline each one within 24 hours.</p>
+          {requests.data.items.map((booking) => (
+            <HostBookingRow key={booking.id} booking={booking} />
+          ))}
+        </section>
+      )}
 
       <div className="section-head">
         <h2>Your places</h2>
@@ -53,11 +76,11 @@ export default function HostingPage() {
         </button>
       )}
 
-      <h2>Bookings</h2>
+      <h2>Upcoming stays</h2>
       <p className="muted">Open a booking to message the guest.</p>
       {bookings.isPending && <p className="notice">Loading…</p>}
       {bookings.error && <p className="notice notice-error">{bookings.error.message}</p>}
-      {bookings.data?.total === 0 && <p className="notice">No bookings of your places yet.</p>}
+      {bookings.data?.total === 0 && <p className="notice">No upcoming stays at your places.</p>}
       {bookings.data?.items.map((booking) => (
         <HostBookingRow key={booking.id} booking={booking} />
       ))}

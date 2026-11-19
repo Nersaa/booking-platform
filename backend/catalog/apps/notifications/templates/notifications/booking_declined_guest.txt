@@ -1,0 +1,9 @@
+{% autoescape off %}Hi {{ user.first_name }},
+
+the host of {{ title }} could not accept your request for
+{{ booking.check_in|date:"j M" }} to {{ booking.check_out|date:"j M Y" }}. You have not been charged.
+
+Other places may still be free for these dates.
+
+Booking reference: {{ booking.id }}
+{% endautoescape %}

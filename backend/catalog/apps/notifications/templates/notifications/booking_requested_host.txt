@@ -1,0 +1,14 @@
+{% autoescape off %}Hi {{ user.first_name }},
+
+a guest asks to book {{ title }}.
+
+Check-in:  {{ booking.check_in|date:"D, j M Y" }}
+Check-out: {{ booking.check_out|date:"D, j M Y" }} ({{ nights }} night{{ nights|pluralize }})
+Guests:    {{ booking.guests }}
+Total:     {{ total }}
+
+Accept or decline it on the website under Hosting within 24 hours; after that the
+request expires and the dates are free again.
+
+Booking reference: {{ booking.id }}
+{% endautoescape %}

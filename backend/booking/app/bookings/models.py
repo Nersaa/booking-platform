@@ -24,15 +24,17 @@ from app.db import Base
 
 
 class BookingStatus(StrEnum):
+    AWAITING_HOST = "awaiting_host"  # a request: the host accepts or declines it
     PENDING_PAYMENT = "pending_payment"
     CONFIRMED = "confirmed"
     CANCELLED = "cancelled"
     EXPIRED = "expired"
     COMPLETED = "completed"
+    DECLINED = "declined"
 
 
-# Bookings in these states hold their dates.
-ACTIVE_STATUSES = (BookingStatus.PENDING_PAYMENT, BookingStatus.CONFIRMED)
+# Bookings that keep their dates only until `hold_expires_at`.
+HOLDING_STATUSES = (BookingStatus.AWAITING_HOST, BookingStatus.PENDING_PAYMENT)
 
 
 class Booking(Base):
@@ -70,11 +72,12 @@ class Booking(Base):
             ("listing_id", "="),
             ("period", "&&"),
             using="gist",
-            where=text("status IN ('pending_payment', 'confirmed')"),
+            where=text("status IN ('awaiting_host', 'pending_payment', 'confirmed')"),
             name="bookings_no_overlap",
         ),
         CheckConstraint(
-            "status IN ('pending_payment', 'confirmed', 'cancelled', 'expired', 'completed')",
+            "status IN ('awaiting_host', 'pending_payment', 'confirmed', 'cancelled', "
+            "'expired', 'completed', 'declined')",
             name="status_valid",
         ),
         CheckConstraint("NOT isempty(period)", name="period_not_empty"),
@@ -84,7 +87,7 @@ class Booking(Base):
         Index(
             "ix_bookings_pending_holds",
             "hold_expires_at",
-            postgresql_where=text("status = 'pending_payment'"),
+            postgresql_where=text("status IN ('awaiting_host', 'pending_payment')"),
         ),
         # Serves the guest's keyset-paginated list: newest first.
         Index("ix_bookings_guest_id_created_at", "guest_id", "created_at", "id"),
@@ -92,14 +95,11 @@ class Booking(Base):
 
     @classmethod
     def holds_dates(cls) -> ColumnElement[bool]:
-        """Confirmed, or awaiting payment within its hold. A stale hold blocks nothing,
-        even before the sweeper expires it."""
+        """Confirmed, or waiting (for the host or the payment) within its hold. A stale
+        hold blocks nothing, even before the sweeper expires it."""
         return or_(
             cls.status == BookingStatus.CONFIRMED,
-            and_(
-                cls.status == BookingStatus.PENDING_PAYMENT,
-                cls.hold_expires_at > func.now(),
-            ),
+            and_(cls.status.in_(HOLDING_STATUSES), cls.hold_expires_at > func.now()),
         )
 
     @property

@@ -42,6 +42,35 @@ def handle_booking_event(event: BookingEvent) -> bool:
     return True
 
 
+def booking_requested_emails(booking: BookingSnapshot) -> list[Email]:
+    return _emails(
+        booking,
+        guest_subject=None,
+        host_subject="Booking request for {title}",
+        template="booking_requested",
+    )
+
+
+def booking_accepted_emails(booking: BookingSnapshot) -> list[Email]:
+    return _emails(
+        booking, guest_subject="Your request for {title} was accepted", template="booking_accepted"
+    )
+
+
+def booking_declined_emails(booking: BookingSnapshot) -> list[Email]:
+    return _emails(
+        booking, guest_subject="Your request for {title} was declined", template="booking_declined"
+    )
+
+
+def booking_request_expired_emails(booking: BookingSnapshot) -> list[Email]:
+    return _emails(
+        booking,
+        guest_subject="Your request for {title} has expired",
+        template="booking_request_expired",
+    )
+
+
 def booking_confirmed_emails(booking: BookingSnapshot) -> list[Email]:
     return _emails(
         booking,
@@ -74,6 +103,10 @@ def booking_completed_emails(booking: BookingSnapshot) -> list[Email]:
 
 
 HANDLERS: dict[BookingEventType, Callable[[BookingSnapshot], list[Email]]] = {
+    BookingEventType.REQUESTED: booking_requested_emails,
+    BookingEventType.ACCEPTED: booking_accepted_emails,
+    BookingEventType.DECLINED: booking_declined_emails,
+    BookingEventType.REQUEST_EXPIRED: booking_request_expired_emails,
     BookingEventType.CONFIRMED: booking_confirmed_emails,
     BookingEventType.CANCELLED: booking_cancelled_emails,
     BookingEventType.COMPLETED: booking_completed_emails,
@@ -83,7 +116,7 @@ HANDLERS: dict[BookingEventType, Callable[[BookingSnapshot], list[Email]]] = {
 def _emails(
     booking: BookingSnapshot,
     *,
-    guest_subject: str,
+    guest_subject: str | None,
     template: str,
     host_subject: str | None = None,
     **extra_context: Any,

@@ -35,7 +35,8 @@ class BookingOut(BaseModel):
     total: int
     refund_amount: int
     hold_expires_at: datetime | None = Field(
-        description="Pay before this moment, or the dates are released."
+        description="Pay (or, for a request, the host answers) before this moment, "
+        "or the dates are released."
     )
     cancelled_by: str | None
     created_at: datetime

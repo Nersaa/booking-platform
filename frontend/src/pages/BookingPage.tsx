@@ -8,7 +8,7 @@ import { useAuth } from '../auth'
 import BookingChat from '../components/BookingChat'
 import Cover from '../components/Cover'
 import ReviewForm from '../components/ReviewForm'
-import { money, plural } from '../format'
+import { dateTime, money, plural } from '../format'
 
 // One booking: what was booked, what it costs, and the next step (pay, wait, or nothing).
 export default function BookingPage() {
@@ -21,8 +21,12 @@ export default function BookingPage() {
     queryFn: () => api<Booking>(`/api/v1/bookings/${id}`),
     enabled: isLoggedIn,
     // The payment result reaches the backend as a webhook, not through this page, so
-    // while the booking waits for payment the page checks back every 2 seconds.
-    refetchInterval: (query) => (query.state.data?.status === 'pending_payment' ? 2000 : false),
+    // while the booking waits for payment the page checks back every 2 seconds; while it
+    // waits for the host's answer, every 15 seconds.
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === 'pending_payment' ? 2000 : status === 'awaiting_host' ? 15_000 : false
+    },
   })
   const listingId = booking.data?.listing_id
   const listing = useQuery({
@@ -51,7 +55,7 @@ export default function BookingPage() {
 
   const b = booking.data
   const nights = daysBetween(b.check_in, b.check_out)
-  const canCancel = b.status === 'pending_payment' || b.status === 'confirmed'
+  const canCancel = ['awaiting_host', 'pending_payment', 'confirmed'].includes(b.status)
   const error = pay.error ?? cancel.error
 
   return (
@@ -125,15 +129,17 @@ export default function BookingPage() {
           </dl>
           {canCancel && (
             <>
-              <p className="muted small">
-                Free cancellation up to 7 days before check-in, half refund until the day
-                before, no refund on the day.
-              </p>
+              {b.status !== 'awaiting_host' && (
+                <p className="muted small">
+                  Free cancellation up to 7 days before check-in, half refund until the day
+                  before, no refund on the day.
+                </p>
+              )}
               <button
                 disabled={cancel.isPending}
                 onClick={() => window.confirm('Cancel this booking?') && cancel.mutate()}
               >
-                Cancel booking
+                {b.status === 'awaiting_host' ? 'Withdraw request' : 'Cancel booking'}
               </button>
             </>
           )}
@@ -154,6 +160,28 @@ function StatusPanel({ booking, listingId, isPaying, onPay }: StatusProps) {
   const total = money(booking.total, booking.currency)
 
   switch (booking.status) {
+    case 'awaiting_host':
+      return (
+        <section className="status-panel">
+          <div>
+            <h2>Waiting for the host's answer</h2>
+            <p>
+              The host answers by{' '}
+              {booking.hold_expires_at && <strong>{dateTime(booking.hold_expires_at)}</strong>};
+              the dates are held for you until then. You pay only after they accept.
+            </p>
+          </div>
+        </section>
+      )
+    case 'declined':
+      return (
+        <section className="status-panel">
+          <h2>The host declined your request</h2>
+          <p>
+            Nothing was charged. <Link to="/">Find another place</Link> for these dates.
+          </p>
+        </section>
+      )
     case 'pending_payment':
       return (
         <section className="status-panel status-panel-pay">
@@ -189,7 +217,8 @@ function StatusPanel({ booking, listingId, isPaying, onPay }: StatusProps) {
         <section className="status-panel">
           <h2>The hold ran out</h2>
           <p>
-            The booking was not paid in time, so the dates were released.{' '}
+            The booking was not paid, or the host did not answer, in time, so the dates were
+            released. Nothing was charged.{' '}
             <Link to={`/listings/${listingId}`}>Book again</Link> if they are still free.
           </p>
         </section>
@@ -208,7 +237,7 @@ function StatusPanel({ booking, listingId, isPaying, onPay }: StatusProps) {
   }
 }
 
-// "12:34", counting down every second.
+// "12:34", or "23 h 59 min" when more than an hour is left, counting down every second.
 function Countdown({ until }: { until: string }) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -217,7 +246,10 @@ function Countdown({ until }: { until: string }) {
   }, [])
 
   const seconds = Math.max(0, Math.floor((new Date(until).getTime() - now) / 1000))
-  const text = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+  const text =
+    seconds >= 3600
+      ? `${Math.floor(seconds / 3600)} h ${Math.floor((seconds % 3600) / 60)} min`
+      : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
   return <strong className="countdown">{text}</strong>
 }
 

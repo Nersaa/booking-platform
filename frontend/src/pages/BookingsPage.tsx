@@ -7,11 +7,13 @@ import { useAuth } from '../auth'
 import { money, plural, shortDate } from '../format'
 
 export const STATUS_LABELS: Record<BookingStatus, string> = {
+  awaiting_host: 'Waiting for the host',
   pending_payment: 'Waiting for payment',
   confirmed: 'Confirmed',
   cancelled: 'Cancelled',
   expired: 'Expired: not paid in time',
   completed: 'Completed',
+  declined: 'Declined by the host',
 }
 
 export default function BookingsPage() {

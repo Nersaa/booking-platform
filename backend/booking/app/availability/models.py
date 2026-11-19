@@ -9,7 +9,7 @@ import uuid
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, SmallInteger, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, SmallInteger, String, func, true
 from sqlalchemy.dialects.postgresql import DATERANGE, ExcludeConstraint, Range
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,6 +37,8 @@ class ListingPricing(Base):
     max_nights: Mapped[int] = mapped_column(SmallInteger, default=365)
     weekly_discount_percent: Mapped[int] = mapped_column(SmallInteger, default=0)
     monthly_discount_percent: Mapped[int] = mapped_column(SmallInteger, default=0)
+    # False: every booking is a request the host accepts or declines first.
+    instant_book: Mapped[bool] = mapped_column(server_default=true())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
