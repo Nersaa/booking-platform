@@ -1,53 +1,41 @@
 # Booking Platform
 
-Backend for a short-term rental marketplace (like Booking.com or Airbnb): hosts publish
-apartments and houses, guests search on the map, book dates and pay. The main rule: the
-same night can never be sold twice, even when many guests book at the same moment.
+A short-term rental marketplace in the spirit of Booking.com and Airbnb, built as a
+backend portfolio project. Hosts publish places, set prices and answer booking requests;
+guests search on a map, book dates and pay. The core rule: **one night can never be sold
+twice**, even when many guests book the same dates at the same moment.
 
-Two services (Django and FastAPI) talk through RabbitMQ, a small React site shows the API
-at work, and everything runs with one `docker compose up`. Design notes: [docs/architecture.md](docs/architecture.md); load test
-results: [docs/load-testing.md](docs/load-testing.md).
+Two Python services (Django and FastAPI) with their own databases, connected by events
+through RabbitMQ. A small React site shows the whole flow. Everything starts with one
+`docker compose up`.
 
-## Features
+## Highlights
 
-- Accounts with JWT; hosts and guests.
-- Listings with photos uploaded straight to S3 storage, moderation in Django Admin.
-- Prices per night, weekends, seasons, discounts; calendar and price quotes.
-- Search by map area or distance, dates, guests, amenities, price and rating.
-- Bookings with a 15-minute hold, payments through a Stripe-like mock with signed
-  webhooks, cancellations with refunds by policy.
-- Instant booking or booking requests, per place: with requests the host accepts or
-  declines within 24 hours, otherwise the request expires.
-- Statistics for hosts: revenue, bookings and occupancy by month, the best places
-  (SQL aggregations: `date_trunc`, `generate_series`, `GROUP BY`).
-- Emails on booking events, reviews after the stay, ratings in search.
-- Help desk: users write to support from the website, staff answer in Django Admin and
-  the answer also arrives by email.
-- Messages between guest and host about a booking; saved listings; a profile with
-  password change and "become a host".
-- Redis cache and rate limits, Prometheus metrics and a Grafana dashboard, Locust load
-  test, CI that tests the services and publishes Docker images.
-- A small website (React + TypeScript): search with filters and a map view, a photo
-  gallery, a date calendar with prices, booking and payment, messages, saved places,
-  reviews, profile, and for hosts: adding places with photos, prices and closed dates.
-
-## Project structure
-
-```
-backend/                 the main part: Python services
-  catalog/               Django + DRF: users, listings, photos, reviews, emails
-  booking/               FastAPI: search, prices, calendar, bookings, payments
-  payment-mock/          FastAPI: a fake Stripe-like payment provider for local runs
-  contracts/             event schemas shared by catalog and booking
-frontend/                React + TypeScript showcase website
-infra/                   configs: Nginx gateway, PostgreSQL init, Prometheus, Grafana
-loadtest/                Locust scenario and demo data seeding
-docs/                    architecture notes and load test results
-scripts/init_env.py      creates .env with random secrets
-docker-compose.yml       the whole stack in one command
-```
-
-See [backend/README.md](backend/README.md) for what is inside each service.
+- **No double bookings.** A PostgreSQL exclusion constraint on `daterange` rejects
+  overlapping bookings inside the database, not in application code. A test fires
+  8 parallel bookings for the same dates and expects exactly one to succeed.
+- **Events without lost messages.** Transactional outbox: the change and its event are
+  saved in one transaction, then relayed to RabbitMQ. Consumers are idempotent, and
+  Booking's copy of the listings ignores events older than what it has.
+- **Payments like a real provider.** A Stripe-like mock with a checkout page,
+  HMAC-signed webhooks that are processed once, and refunds by cancellation policy.
+- **Booking lifecycle.** Unpaid bookings hold dates for 15 minutes. Places can require
+  the host's approval: 24 hours to answer, then 24 hours to pay. Background jobs expire
+  holds and are safe to run in several replicas (`FOR UPDATE SKIP LOCKED`).
+- **Service-to-service auth without calls.** Catalog signs JWTs with RS256; Booking
+  checks them with Catalog's public key from JWKS.
+- **Search.** Map area or radius, dates, guests, price, rating and amenities in one
+  PostGIS query; Redis cache and per-user and per-client rate limits.
+- **Photo uploads.** Presigned POST straight to S3 storage; a Celery task makes WebP
+  versions and strips EXIF (no GPS leaks).
+- **Host statistics in SQL.** Revenue and occupancy by month with `date_trunc`,
+  `generate_series` and `GROUP BY`.
+- **Operations.** Prometheus metrics, a Grafana dashboard, a Locust load
+  test: 96 requests/s with p95 of 12 ms on one desktop, zero errors
+  ([results](docs/load-testing.md)).
+- **Quality.** About 240 tests against real PostgreSQL + PostGIS and Redis
+  (Testcontainers), 94-95% coverage of both services, mypy (strict in Booking), ruff;
+  CI tests everything and publishes Docker images.
 
 ## Architecture
 
@@ -60,287 +48,86 @@ flowchart LR
     nginx -- /media --> s3[(S3 storage)]
     catalog --> catalogdb[(PostgreSQL<br/>catalog)]
     booking --> bookingdb[(PostgreSQL + PostGIS<br/>booking)]
-    catalog & booking --> redis[(Redis<br/>cache, rate limits)]
+    catalog & booking --> redis[(Redis)]
     catalog -- listing events --> mq[[RabbitMQ]]
     mq -- listing events --> booking
     booking -- booking events --> mq
     mq -- booking events --> catalog
-    catalog --> s3
     booking <-- API + signed webhooks --> pay[Payment provider<br/>mock]
-    catalog -- email --> smtp[SMTP<br/>Mailpit]
-    prom[Prometheus] -. metrics .-> catalog
-    prom -.-> booking
-    grafana[Grafana] --> prom
+    catalog -- email --> smtp[Mailpit]
 ```
 
 | Service | Owns | Why this framework |
 |---|---|---|
-| **Catalog** | users and JWT issuing, listings, photos, moderation, reviews, support, notifications | Django Admin, auth, ORM and migrations out of the box: ideal for CRUD and a back-office |
-| **Booking** | search, availability, pricing, quotes, bookings, payments and refunds | async I/O and strict typing for the high-traffic path |
+| **Catalog** (Django + DRF) | users and JWT, listings, photos, moderation, reviews, support, emails | Admin, auth and ORM out of the box: CRUD and a back office |
+| **Booking** (FastAPI) | search, prices, calendar, bookings, payments, host statistics | async I/O and strict typing on the busy path |
 
-Each service has its own database. They don't call each other over HTTP: Booking checks
-Catalog's JWTs with Catalog's public key and keeps its own copy of the listings, updated
-by events.
-
-### Event flow
-
-```mermaid
-sequenceDiagram
-    participant C as Catalog
-    participant DB as catalog DB
-    participant R as Celery beat task
-    participant MQ as RabbitMQ
-    participant B as Booking worker
-    C->>DB: save listing + outbox event (one transaction)
-    R->>DB: take unsent events
-    R->>MQ: publish
-    R->>DB: mark as sent
-    MQ->>B: listing.published / updated / archived
-    B->>B: update its copy if the version is newer
-```
-
-Booking sends `booking.confirmed`, `booking.cancelled` and `booking.completed` the same
-way; Catalog turns them into emails and opens a review after the stay. Event schemas are
-shared Pydantic models in [`backend/contracts`](backend/contracts).
+The services never call each other over HTTP. Design decisions are explained in
+[docs/architecture.md](docs/architecture.md), the API in [docs/api.md](docs/api.md).
 
 ## Tech stack
 
-Python 3.13 · Django 5.2 · DRF · FastAPI · SQLAlchemy 2 (async) · Alembic · FastStream ·
-PostgreSQL 17 + PostGIS · Redis · RabbitMQ · Celery · S3-compatible storage (RustFS
-locally) · Mailpit · Nginx · Prometheus · Grafana · Locust · Docker Compose · uv · ruff ·
-mypy · pytest + Testcontainers · GitHub Actions
+**Backend:** Python 3.13, Django 5.2, DRF, FastAPI, SQLAlchemy 2 (async), Alembic,
+Celery, FastStream, PostgreSQL 17 + PostGIS, Redis, RabbitMQ, S3 (RustFS locally)
 
-Website: React 19 · TypeScript · Vite · React Router · TanStack Query · Leaflet
+**Infrastructure:** Docker Compose, Nginx, Prometheus, Grafana, Locust, GitHub Actions
 
-## Quick start
+**Quality:** pytest + Testcontainers, mypy, ruff, uv, pre-commit
+
+**Frontend:** React 19, TypeScript, Vite, TanStack Query, React Router, Leaflet
+
+## Run it
 
 Requirements: Docker with Compose v2 and Python 3 (only to generate secrets).
 
 ```bash
-python scripts/init_env.py      # creates .env with random secrets (adds new keys on upgrade)
+python scripts/init_env.py                 # .env with random secrets
 docker compose up -d --build
+python loadtest/seed.py --count 300        # demo: 300 places with photos, a year of stays
 docker compose exec catalog-api python manage.py createsuperuser
 ```
-
-To fill the site with demo listings (300 places in 8 cities, each with 3-5 photos):
-`python loadtest/seed.py`; it also adds a year of past stays for the host's statistics
-(`docker compose exec booking-api python -m app.demo_stays`). Listings seeded before photos existed get them with
-`docker compose exec catalog-api python manage.py seed_photos`. The demo photos are free
-Unsplash images, see [`backend/catalog/demo/photos/CREDITS.md`](backend/catalog/demo/photos/CREDITS.md).
 
 | URL | What |
 |---|---|
 | http://localhost/ | The website |
-| http://localhost/api/docs/catalog/ | Catalog API (Swagger UI) |
-| http://localhost/api/docs/booking/ | Booking API (Swagger UI) |
-| http://localhost/admin/ | Moderation desk (Django Admin) |
-| http://localhost/.well-known/jwks.json | Public keys for JWT verification |
+| http://localhost/admin/ | Django Admin: moderation and support |
+| http://localhost/api/docs/catalog/, http://localhost/api/docs/booking/ | Swagger UI |
 | http://localhost:8025 | Mailpit: every email the platform sends |
-| http://localhost:8090/docs | Payment provider mock |
-| http://localhost:3000 | Grafana: the "Booking Platform" dashboard (admin / `GRAFANA_ADMIN_PASSWORD` from `.env`) |
-| http://localhost:9090 | Prometheus |
-| http://localhost:15672 | RabbitMQ management |
-| http://localhost:9001 | Object storage console |
+| http://localhost:3000 | Grafana (admin / `GRAFANA_ADMIN_PASSWORD` from `.env`) |
 
-## Website
+### Things to try
 
-A deliberately small showcase of the API in [`frontend/`](frontend); the backend is the
-main part of this project.
+1. Register, search on the map, pick dates in the calendar and book.
+2. Pay with the test card `4242 4242 4242 4242` (`4000 0000 0000 0002` is declined).
+   The booking is confirmed by the webhook; the email is in Mailpit.
+3. In the profile, become a host. Add a place with photos, then publish it in Django
+   Admin (Listings). Set prices, close dates, turn off instant booking.
+4. Book it from another account: the host gets a request to accept or decline.
+5. Open Hosting → Statistics. As the demo host (`seed-host@example.com`, set a password
+   in Django Admin) it shows a full year.
 
-- **Search**: place, dates (a calendar), guests and "Filters": price per night, type of
-  place, bedrooms, rating, amenities. Results come as a grid of places; "Show map"
-  switches to a map with price tags, where "Search this area" searches what the map
-  shows. Filters live in the URL, so a search can be shared.
-- **Listing**: a photo gallery (arrows, thumbnails, keyboard), amenities, reviews and a
-  calendar for the next six months: taken
-  nights are greyed out and every free night shows its price. The heart saves the place
-  to "Saved".
-- **Booking**: log in or register and book. The booking's page shows the price, the
-  dates and how long they are held; "Pay" opens the provider's checkout, where the test
-  card `4242 4242 4242 4242` pays and `4000 0000 0000 0002` is declined. After paying,
-  the guest comes back to the booking and sees it confirmed. Cancel to see the refund.
-  The same page has messages with the host, and after the stay a form to rate it.
-  A place without instant booking shows "Request to book": the booking waits for the
-  host's answer, and the guest pays after the host accepts.
-- **Hosting** (for hosts): requests to answer (accept or decline), their places and the
-  upcoming stays, each with the conversation with the guest and a cancel button.
-- **Statistics** (for hosts): revenue, bookings, average booking and occupancy for a
-  year, a chart by month and the best places.
-- **Add a place** (for hosts): details, amenities and a point on the map; then photos
-  (uploaded straight to object storage), "Send for review", and once a moderator has
-  published it in Django Admin, prices, closed dates and whether guests book
-  instantly or send requests. Drafts can be deleted,
-  published places archived.
-- **Profile**: name, password, "Become a host".
-
-- **Help**: write to support about a booking, a payment or the account, and follow the
-  conversation. Staff answer in Django Admin (Support requests); the user also gets the
-  answer by email.
-
-Moderators publish or reject listings in Django Admin (Listings).
-
-## API
-
-All services sit behind one gateway, so clients see a single API. Paths are routed to the
-owning service by Nginx.
-
-### Catalog
-
-| Method | Path | Who | Description |
-|---|---|---|---|
-| POST | `/api/v1/auth/register` | anyone | Create an account |
-| POST | `/api/v1/auth/token` | anyone | Log in, get access and refresh tokens |
-| POST | `/api/v1/auth/token/refresh` | anyone | Rotate the refresh token |
-| POST | `/api/v1/auth/logout` | anyone | Revoke a refresh token |
-| GET, PATCH | `/api/v1/users/me` | user | Profile |
-| POST | `/api/v1/users/me/host` | user | Become a host (returns tokens with the new role) |
-| POST | `/api/v1/users/me/password` | user | Change the password (needs the current one) |
-| GET | `/api/v1/favorites` | user | Saved listings |
-| PUT, DELETE | `/api/v1/favorites/{listing_id}` | user | Save or unsave a listing |
-| GET | `/api/v1/amenities` | anyone | Amenity dictionary |
-| GET | `/api/v1/listings/{id}` | anyone | Published listing with its rating (cached) |
-| GET | `/api/v1/listings/{id}/reviews` | anyone | Reviews, newest first (`page`, `page_size`) |
-| GET | `/api/v1/reviews/pending` | user | Own finished stays that can still be reviewed |
-| POST | `/api/v1/reviews` | user | Review a finished stay: 1 to 5 and a text, once, within 14 days |
-| POST | `/api/v1/host/reviews/{id}/reply` | host | Reply publicly to a review, once |
-| GET, POST | `/api/v1/support/tickets` | user | Own support requests; open a new one |
-| GET | `/api/v1/support/tickets/{id}` | user | A request with its messages |
-| POST | `/api/v1/support/tickets/{id}/messages` | user | Write to support again |
-| POST | `/api/v1/support/tickets/{id}/close` | user | Close a solved request |
-| GET, POST | `/api/v1/host/listings` | host | Own listings |
-| GET, PATCH, DELETE | `/api/v1/host/listings/{id}` | host | Manage a listing |
-| POST | `/api/v1/host/listings/{id}/submit` | host | Send for moderation |
-| POST | `/api/v1/host/listings/{id}/archive` | host | Withdraw a listing |
-| POST | `/api/v1/host/listings/{id}/photos` | host | Get a presigned upload |
-| POST | `/api/v1/host/listings/{id}/photos/{photo_id}/complete` | host | Confirm the upload |
-| DELETE | `/api/v1/host/listings/{id}/photos/{photo_id}` | host | Remove a photo |
-
-### Booking
-
-Amounts are integers in minor units (cents). Periods are `[start_date, end_date)`.
-
-| Method | Path | Who | Description |
-|---|---|---|---|
-| GET | `/api/v1/listings` | anyone | Search: map area or point, dates, filters, sorting |
-| GET | `/api/v1/listings/{id}/calendar` | anyone | Nightly availability and prices |
-| GET | `/api/v1/listings/{id}/quote` | anyone | Price breakdown for `check_in`, `check_out`, `guests` |
-| GET, PUT | `/api/v1/host/listings/{id}/pricing` | host | Nightly, weekend price, cleaning fee, stay limits, discounts, `instant_book` |
-| GET, POST | `/api/v1/host/listings/{id}/seasonal-rates` | host | Prices for a period (no overlaps) |
-| DELETE | `/api/v1/host/listings/{id}/seasonal-rates/{rate_id}` | host | Remove a seasonal rate |
-| GET, POST | `/api/v1/host/listings/{id}/blocks` | host | Close dates for guests (no overlaps) |
-| DELETE | `/api/v1/host/listings/{id}/blocks/{block_id}` | host | Reopen dates |
-
-Search example: free places for two in a map area, with the price of the stay:
+## Project structure
 
 ```
-GET /api/v1/listings?bbox=-9.25,38.68,-9.08,38.80&check_in=2027-05-03&check_out=2027-05-07&guests=2&amenities=wifi
+backend/
+  catalog/        Django + DRF service
+  booking/        FastAPI service
+  payment-mock/   fake payment provider
+  contracts/      event schemas shared by both services
+frontend/         React + TypeScript site
+infra/            Nginx, PostgreSQL init, Prometheus, Grafana
+loadtest/         Locust scenario and demo data
+docs/             architecture, API, load test results
 ```
-
-Other filters: `lat`, `lon`, `radius_km`, `country`, `city`, `property_type`,
-`min_bedrooms`, `min_rating`, `currency` with `min_price` / `max_price`; `sort` is
-`distance`, `price` or `rating`. Lists take `limit` and `offset` and return
-`{"items": [...], "total": 42, "limit": 20, "offset": 0}`.
-
-A listing is bookable once it is published and priced.
-
-#### Bookings and payments
-
-| Method | Path | Who | Description |
-|---|---|---|---|
-| POST | `/api/v1/bookings` | user | Book: prices the stay and holds the dates for 15 minutes (a request: 24 hours for the host's answer) |
-| GET | `/api/v1/bookings`, `/api/v1/bookings/{id}` | guest | Own bookings, newest first |
-| POST | `/api/v1/bookings/{id}/payments` | guest | Start a payment, get the checkout URL |
-| POST | `/api/v1/bookings/{id}/cancel` | guest | Cancel; refund by policy |
-| GET, POST | `/api/v1/bookings/{id}/messages` | guest | Messages with the host |
-| GET | `/api/v1/host/bookings`, `/api/v1/host/bookings/{id}` | host | Stays at own listings, by check-in date; `status`, `upcoming` filters |
-| POST | `/api/v1/host/bookings/{id}/accept` | host | Accept a request; the guest has 24 hours to pay |
-| POST | `/api/v1/host/bookings/{id}/decline` | host | Decline a request; the dates are free again |
-| POST | `/api/v1/host/bookings/{id}/cancel` | host | Cancel; the guest gets a full refund |
-| GET | `/api/v1/host/stats?year=2026` | host | Revenue, bookings, occupancy by month, best places |
-| GET, POST | `/api/v1/host/bookings/{id}/messages` | host | Messages with the guest |
-
-```mermaid
-stateDiagram-v2
-    [*] --> pending_payment: book (dates held 15 min)
-    [*] --> awaiting_host: request (dates held 24 h)
-    awaiting_host --> pending_payment: host accepts (24 h to pay)
-    awaiting_host --> declined: host declines
-    awaiting_host --> expired: no answer in time
-    awaiting_host --> cancelled: guest withdraws
-    pending_payment --> confirmed: payment.succeeded webhook
-    pending_payment --> expired: hold ran out
-    pending_payment --> cancelled: guest
-    confirmed --> cancelled: guest or host, refund by policy
-    confirmed --> completed: after check-out
-```
-
-Two active bookings can never overlap: a PostgreSQL exclusion constraint guarantees it,
-even for requests that arrive at the same moment. Payment results arrive as HMAC-signed
-webhooks, each processed once; refunds are sent to the provider when a booking is
-cancelled.
-
-Cancellation policy: host cancels → full refund; guest cancels 7+ days before check-in →
-full refund, 1 to 6 days → half, on the day → none.
-
-Errors of all services follow [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457)
-(`application/problem+json`).
-
-### Caching and rate limits
-
-- Search pages are cached in Redis for 30 seconds (`X-Cache: HIT|MISS`); the listing page
-  is cached until the listing changes. Calendar, quotes and bookings are never cached.
-- Booking allows 60 searches and 120 calendar/quote requests per minute per client
-  address, and 20 booking actions per minute per user (a counter in Redis). Extra
-  requests get 429 with `Retry-After`. Catalog limits login and registration attempts.
-
-### Listing lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> draft
-    draft --> pending_review: host submits (needs a photo)
-    pending_review --> published: moderator
-    pending_review --> rejected: moderator, with reason
-    rejected --> pending_review: host fixes and resubmits
-    draft --> archived
-    pending_review --> archived
-    rejected --> archived
-    published --> archived
-```
-
-### Photo upload
-
-1. `POST .../photos` returns a presigned POST pinned to the key, content type and 10 MB.
-2. The client uploads the file straight to object storage; API workers never see the bytes.
-   Browsers post to `http://localhost/storage/...`: the gateway passes only POSTs on to
-   the storage, so the site and the upload share one origin and need no CORS setup.
-3. `POST .../complete` queues a Celery task that validates the image, renders WebP
-   variants without EXIF (no GPS leaks) and deletes the private original.
-
-## Monitoring and load testing
-
-- Both APIs expose Prometheus metrics; Grafana at http://localhost:3000 shows requests,
-  errors, latency, bookings and RabbitMQ queues ([`infra/`](infra)).
-- [`loadtest/`](loadtest) has a Locust scenario and a seed script; results are in
-  [docs/load-testing.md](docs/load-testing.md).
-- CI runs linters, type checks and tests, then publishes the Docker images to GitHub
-  Container Registry from `main`.
 
 ## Development
 
-Each service is its own uv project; `backend/contracts` is installed into Catalog and
-Booking as an editable path dependency.
-
 ```bash
-cd backend/catalog     # or backend/booking, backend/payment-mock
+cd backend/booking            # or backend/catalog, backend/payment-mock
 uv sync
-uv run python -m pytest  # starts PostgreSQL (RabbitMQ, Redis) via Testcontainers; Docker required
+uv run python -m pytest       # needs Docker: tests start their own databases
 uv run python -m mypy .
 ```
 
-From the repository root: `make lint`, `make test`, `make typecheck`.
-
-The website: `cd frontend && npm install && npm run dev` (http://localhost:5173, talks to
-the running Docker Compose stack).
-
-Install the git hooks once with `uvx pre-commit install`.
+From the repository root: `make lint`, `make test`, `make typecheck`. The site in dev
+mode: `cd frontend && npm install && npm run dev` (uses the running stack).
